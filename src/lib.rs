@@ -1,5 +1,17 @@
 use std::mem;
 
+use ctor::ctor;
+
+static mut SHUFFLE: unsafe fn(usize, usize, *const u8, *mut u8) = generic::shuffle;
+
+#[ctor]
+fn select_implementation() {
+    // Safe because ctor guarantees only one writer at a time
+    unsafe {
+        SHUFFLE = generic::shuffle;
+    }
+}
+
 /// Generic non-optimized stuff
 mod generic {
     use std::ptr;
@@ -54,7 +66,7 @@ pub fn shuffle<T: Copy>(src: &[T], dst: &mut [T]) {
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        generic::shuffle(ts, src.len() * ts,
+        SHUFFLE(ts, src.len() * ts,
             src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
     }
 }
@@ -65,7 +77,7 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     // Safe because of the first assertion.
     unsafe {
-        generic::shuffle(typesize, src.len(),
+        SHUFFLE(typesize, src.len(),
             src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
     }
 }
