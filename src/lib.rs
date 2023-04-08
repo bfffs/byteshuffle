@@ -1,56 +1,60 @@
-use std::{mem, ptr};
+use std::mem;
 
+/// Generic non-optimized stuff
+mod generic {
+    use std::ptr;
 
-/// Generic non-optimized shuffle routine
-///
-/// # Safety
-/// src and dst must both be of exactly len bytes long.
-unsafe fn shuffle_generic(
-    typesize: usize,
-    len: usize,
-    src: *const u8,
-    dst: *mut u8)
-{
-    let quot = len / typesize;
-    let rem = len % typesize;
+    /// Generic non-optimized shuffle routine
+    ///
+    /// # Safety
+    /// src and dst must both be of exactly len bytes long.
+    pub unsafe fn shuffle(
+        typesize: usize,
+        len: usize,
+        src: *const u8,
+        dst: *mut u8)
+    {
+        let quot = len / typesize;
+        let rem = len % typesize;
 
-    for j in 0..typesize {
-        for i in 0..quot {
-            *dst.add(j * quot + i) = *src.add(i * typesize + j)
-        }
-    }
-    ptr::copy_nonoverlapping(src.add(len - rem), dst.add(len - rem), rem);
-}
-
-/// Generic non-optimized unshuffle routine
-///
-/// # Safety
-/// src and dst must both be of exactly len bytes long.
-unsafe fn unshuffle_generic(
-    typesize: usize,
-    len: usize,
-    src: *const u8,
-    dst: *mut u8)
-{
-    let quot = len / typesize;
-    let rem = len % typesize;
-
-    for i in 0..quot {
         for j in 0..typesize {
-            *dst.add(i * typesize + j) = *src.add(j * quot + i)
+            for i in 0..quot {
+                *dst.add(j * quot + i) = *src.add(i * typesize + j)
+            }
         }
+        ptr::copy_nonoverlapping(src.add(len - rem), dst.add(len - rem), rem);
     }
-    ptr::copy_nonoverlapping(src.add(len - rem), dst.add(len - rem), rem);
+
+    /// Generic non-optimized unshuffle routine
+    ///
+    /// # Safety
+    /// src and dst must both be of exactly len bytes long.
+    pub unsafe fn unshuffle(
+        typesize: usize,
+        len: usize,
+        src: *const u8,
+        dst: *mut u8)
+    {
+        let quot = len / typesize;
+        let rem = len % typesize;
+
+        for i in 0..quot {
+            for j in 0..typesize {
+                *dst.add(i * typesize + j) = *src.add(j * quot + i)
+            }
+        }
+        ptr::copy_nonoverlapping(src.add(len - rem), dst.add(len - rem), rem);
+    }
 }
 
-/// Shuffle an array of fixed-size objects.
+    /// Shuffle an array of fixed-size objects.
 pub fn shuffle<T: Copy>(src: &[T], dst: &mut [T]) {
     assert_eq!(src.len(), dst.len());
     let ts = mem::size_of::<T>();
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        shuffle_generic(ts, src.len() * ts,
+        generic::shuffle(ts, src.len() * ts,
             src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
     }
 }
@@ -61,7 +65,7 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     // Safe because of the first assertion.
     unsafe {
-        shuffle_generic(typesize, src.len(),
+        generic::shuffle(typesize, src.len(),
             src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
     }
 }
@@ -73,7 +77,7 @@ pub fn unshuffle<T: Copy>(src: &[T], dst: &mut [T]) {
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        unshuffle_generic(ts, src.len() * ts,
+        generic::unshuffle(ts, src.len() * ts,
             src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
     }
 }
@@ -81,7 +85,7 @@ pub fn unshuffle<T: Copy>(src: &[T], dst: &mut [T]) {
 pub fn unshuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     unsafe {
-        unshuffle_generic(typesize, src.len(),
+        generic::unshuffle(typesize, src.len(),
             src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
     }
 }
