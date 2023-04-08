@@ -13,7 +13,7 @@ impl Spec {
     }
 }
 
-fn shufflex(c: &mut Criterion) {
+fn shuffle_(c: &mut Criterion) {
     let mut g = c.benchmark_group("shuffle");
 
     for spec in [
@@ -25,7 +25,7 @@ fn shufflex(c: &mut Criterion) {
         Spec::new("ridt-47", 47, 15240),
         Spec::new("alloct-18", 18, 11478)].iter()
     {
-        g.throughput(Throughput::Bytes(4096));
+        g.throughput(Throughput::Bytes(spec.size as u64));
         let id = BenchmarkId::from_parameter(spec.name);
         g.bench_with_input(id, &spec, |b, spec| {
             let src = vec![0u8; spec.size];
@@ -36,5 +36,5 @@ fn shufflex(c: &mut Criterion) {
 }
 
 
-criterion_group!(benches, shufflex);
+criterion_group!(benches, shuffle_);
 criterion_main!(benches);
