@@ -4,6 +4,7 @@ use core::arch::x86_64::*;
 
 use std::mem;
 
+/// SSE2 optimized shuffle for 2-byte type sizes
 #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
 unsafe fn shuffle2(
     vectorizable_elements: usize,
@@ -43,6 +44,64 @@ unsafe fn shuffle2(
     }
 }
 
+/// SSE2 optimized shuffle for 16-byte type sizes
+#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+unsafe fn shuffle16(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8)
+{
+    const TS: usize = 16;
+    const SO128I: usize = mem::size_of::<__m128i>();
+    let mut xmm0: [__m128i; 16] = mem::zeroed();
+    let mut xmm1: [__m128i; 16] = mem::zeroed();
+
+    for j in (0..vectorizable_elements).step_by(SO128I) {
+        for k in 0..16 {
+            let p = src.add(j * TS + k * SO128I) as *const __m128i;
+            xmm0[k] = _mm_loadu_si128(p);
+        }
+        /* Transpose bytes */
+        for k in 0..8 {
+            let l = k * 2;
+            xmm1[k * 2] = _mm_unpacklo_epi8(xmm0[l], xmm0[l + 1]);
+            xmm1[k * 2 + 1] = _mm_unpackhi_epi8(xmm0[l], xmm0[l + 1]);
+        }
+        /* Transpose words */
+        let mut l = 0;
+        for k in 0..8 {
+            xmm0[k * 2] = _mm_unpacklo_epi16(xmm1[l], xmm1[l + 2]);
+            xmm0[k * 2 + 1] = _mm_unpackhi_epi16(xmm1[l], xmm1[l + 2]);
+            l += 1;
+            if k % 2 == 1 {
+                l += 2;
+            }
+        }
+        /* Transpose double words */
+        l = 0;
+        for k in 0..8 {
+            xmm1[k * 2] = _mm_unpacklo_epi32(xmm0[l], xmm0[l + 4]);
+            xmm1[k * 2 + 1] = _mm_unpackhi_epi32(xmm0[l], xmm0[l + 4]);
+            l += 1;
+            if k % 4 == 3 {
+                l += 4;
+            }
+        }
+        /* Transpose quad words */
+        for k in 0..8 {
+            xmm0[k * 2] = _mm_unpacklo_epi64(xmm1[k], xmm1[k + 8]);
+            xmm0[k * 2 + 1] = _mm_unpackhi_epi64(xmm1[k], xmm1[k + 8]);
+        }
+        /* Store the result vectors */
+        let dst_for_jth_element = dst.add(j);
+        for k in 0..16 {
+            let p = dst_for_jth_element.add(k * total_elements) as *mut __m128i;
+            _mm_storeu_si128(p, xmm0[k]);
+        }
+    }
+}
+
 pub unsafe fn shuffle(
     typesize: usize,
     len: usize,
@@ -68,6 +127,8 @@ pub unsafe fn shuffle(
 
     if typesize == 2 {
         shuffle2(vectorizable_elements, total_elements, src, dst);
+    } else if typesize == 16 {
+        shuffle16(vectorizable_elements, total_elements, src, dst);
     } else {
         //TODO: maybe eliminate optimization for typesize=2, since bfffs does
         //not use it.
@@ -94,6 +155,11 @@ mod t {
         #[case(2, 32)]
         #[case(2, 64)]
         #[case(2, 4096)]
+        #[case(16, 16)]
+        #[case(16, 64)]
+        #[case(16, 128)]
+        #[case(16, 256)]
+        #[case(16, 4096)]
         fn compare(#[case] typesize: usize, #[case] len: usize) {
             let mut rng = rand::thread_rng();
 
