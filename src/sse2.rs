@@ -40,8 +40,8 @@ unsafe fn shuffle2(
             let p = dst_for_jth_element.add(k * total_elements) as *mut __m128i;
             _mm_storeu_si128(p, xmm1[k]);
         }
-      }
-  }
+    }
+}
 
 pub unsafe fn shuffle(
     typesize: usize,
@@ -83,4 +83,28 @@ pub unsafe fn shuffle(
     }
 }
 
+#[cfg(test)]
+mod t {
+    mod shuffle {
+        use rand::Rng;
+        use rstest::rstest;
 
+        #[rstest]
+        #[case(2, 16)]
+        #[case(2, 32)]
+        #[case(2, 64)]
+        #[case(2, 4096)]
+        fn compare(#[case] typesize: usize, #[case] len: usize) {
+            let mut rng = rand::thread_rng();
+
+            let src = (0..len).map(|_| rng.gen()).collect::<Vec<u8>>();
+            let mut generic_dst = vec![0u8; len];
+            let mut sse2_dst = vec![0u8; len];
+            unsafe {
+                crate::generic::shuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
+                crate::sse2::shuffle(typesize, len, src.as_ptr(), sse2_dst.as_mut_ptr());
+            }
+            assert_eq!(generic_dst, sse2_dst);
+        }
+    }
+}

@@ -1,14 +1,25 @@
 use std::mem;
 
+use cfg_if::cfg_if;
 use ctor::ctor;
+
+mod sse2;
 
 static mut SHUFFLE: unsafe fn(usize, usize, *const u8, *mut u8) = generic::shuffle;
 
 #[ctor]
 fn select_implementation() {
     // Safe because ctor guarantees only one writer at a time
-    unsafe {
-        SHUFFLE = generic::shuffle;
+    cfg_if! {
+        if #[cfg(any(target_arch = "x86_64", target_arch = "x86"))] {
+            if is_x86_feature_detected!("sse2") {
+                unsafe { SHUFFLE = sse2::shuffle; }
+            } else {
+                unsafe { SHUFFLE = generic::shuffle; }
+            }
+        } else {
+            unsafe { SHUFFLE = generic::shuffle; }
+        }
     }
 }
 
@@ -138,6 +149,14 @@ mod t {
             let mut dst = [0u8; 5];
             shuffle_bytes(2, &src[..], &mut dst[..]);
             assert_eq!(dst, &[0x34, 0x78, 0x12, 0x56, 0x9a][..]);
+        }
+
+        #[test]
+        fn twobythirtytwo() {
+            let src = (0..128).collect::<Vec<u8>>();
+            let mut dst = [0u8; 128];
+            shuffle_bytes(2, &src[..], &mut dst[..]);
+            dbg!(dst);
         }
     }
 
