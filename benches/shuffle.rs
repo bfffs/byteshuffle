@@ -19,6 +19,7 @@ fn shuffle_(c: &mut Criterion) {
     for spec in [
         Spec::new("two", 2, 4096),
         Spec::new("four", 4, 4096),
+        Spec::new("16x256", 16, 256),
         Spec::new("sixteen", 16, 4096),
         Spec::new("fs-32", 32, 36844),
         Spec::new("fs-36", 36, 6564),
