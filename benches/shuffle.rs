@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use shuffle::{shuffle, shuffle_bytes};
+use shuffle::shuffle_bytes;
 
 
 struct Spec {
