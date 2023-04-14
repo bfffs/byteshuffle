@@ -50,7 +50,7 @@ unsafe fn shuffle16(
                 xmm[k] = _mm_i32gather_epi32(p, vindex, 1);
                 // xmm[0] should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51]
                 xmm[k] = _mm_shuffle_epi8(xmm[k], shuf8);
-                // xmm[0] should look like [0, 16, 32, 48, 1, 17, 33, 49, 3, 18, 34, 50, 3, 19, 35, 51]
+                // xmm[0] should look like [0, 16, 32, 48, 1, 17, 33, 49, 2, 18, 34, 50, 3, 19, 35, 51]
             }
             // This next step is logically a rotation, but we use shuffle instructions
             xmm[1] = _mm_shuffle_epi32(xmm[1], 0x93);
