@@ -1,9 +1,12 @@
+#![feature(avx512_target_feature)]
+
 use std::mem;
 
 use cfg_if::cfg_if;
 use ctor::ctor;
 
 mod avx2;
+mod avx512f;
 mod sse2;
 
 static mut SHUFFLE: unsafe fn(usize, usize, *const u8, *mut u8) = generic::shuffle;
@@ -13,7 +16,9 @@ fn select_implementation() {
     // Safe because ctor guarantees only one writer at a time
     cfg_if! {
         if #[cfg(any(target_arch = "x86_64", target_arch = "x86"))] {
-            if is_x86_feature_detected!("avx2") {
+            if is_x86_feature_detected!("avx512f") {
+                unsafe { SHUFFLE = avx512f::shuffle; }
+            } else if is_x86_feature_detected!("avx2") {
                 unsafe { SHUFFLE = avx2::shuffle; }
             } else if is_x86_feature_detected!("sse2") {
                 unsafe { SHUFFLE = sse2::shuffle; }
