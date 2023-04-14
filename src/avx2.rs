@@ -128,7 +128,6 @@ pub unsafe fn shuffle(
 #[cfg(test)]
 mod t {
     mod shuffle {
-        // use pretty_assertions::assert_eq;
         use rand::Rng;
         use rstest::rstest;
 
