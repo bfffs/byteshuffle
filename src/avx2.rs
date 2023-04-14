@@ -127,15 +127,26 @@ pub unsafe fn shuffle(
 
 #[cfg(test)]
 mod t {
+    macro_rules! require_avx2 {
+        () => {
+            if !is_x86_feature_detected!("avx2") {
+                eprintln!("Skipping: AVX2 unavailable.");
+                return;
+            }
+        }
+    }
+
     mod shuffle {
         use rand::Rng;
         use rstest::rstest;
+        use super::*;
 
         #[rstest]
         #[case(16, 256)]
         #[case(16, 4096)]
         #[case(16, 4352)]
         fn compare(#[case] typesize: usize, #[case] len: usize) {
+            require_avx2!();
             let mut rng = rand::thread_rng();
 
             let src = (0..len).map(|_| rng.gen()).collect::<Vec<u8>>();
@@ -151,6 +162,7 @@ mod t {
         // This test is redundant with the randomly generated one, but easier to debug.
         #[rstest]
         fn compare16x256() {
+            require_avx2!();
             let typesize = 16;
             let len = 256;
             let src = (0..=255).collect::<Vec<u8>>();
@@ -165,6 +177,7 @@ mod t {
 
         #[rstest]
         fn compare16x512() {
+            require_avx2!();
             let typesize = 16;
             let len = 512;
             let src = (0..len)

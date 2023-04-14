@@ -146,6 +146,15 @@ pub unsafe fn shuffle(
 
 #[cfg(test)]
 mod t {
+    macro_rules! require_sse2 {
+        () => {
+            if !is_x86_feature_detected!("sse2") {
+                eprintln!("Skipping: SSE2 unavailable.");
+                return;
+            }
+        }
+    }
+
     mod shuffle {
         use rand::Rng;
         use rstest::rstest;
@@ -161,6 +170,7 @@ mod t {
         #[case(16, 256)]
         #[case(16, 4096)]
         fn compare(#[case] typesize: usize, #[case] len: usize) {
+            require_sse2!();
             let mut rng = rand::thread_rng();
 
             let src = (0..len).map(|_| rng.gen()).collect::<Vec<u8>>();
