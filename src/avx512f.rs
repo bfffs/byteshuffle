@@ -129,9 +129,9 @@ unsafe fn shuffle_tiled(
         0
     );
 
-    for i in 0..(vectorizable_elements / (SO512I / SOI32)) {
+    for i in 0..(vectorizable_elements / 16) {
         for j in 0..(ts / SOI32) {
-            let p = src.add(i * SOI32 * SO512I + j * 16 / SOI32) as *const u8;
+            let p = src.add(i * 16 * ts + j * 16 / SOI32) as *const u8;
             let mut zmm = _mm512_i32gather_epi32(loadindex, p, 1);
             // zmm should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51, 64, 65, 66, 67...]
             zmm = shuffle_8x4(zmm);
