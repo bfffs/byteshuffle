@@ -100,7 +100,6 @@ unsafe fn shuffle_tiled(
 {
     debug_assert_eq!(vectorizable_elements % 4, 0);
     debug_assert_eq!(total_elements, vectorizable_elements, "TODO");
-    debug_assert_eq!(ts % 4, 0, "TODO");
 
     let loadindex = _mm512_set_epi32(
         15 * ts as i32,
@@ -140,6 +139,14 @@ unsafe fn shuffle_tiled(
             // zmm should look like [0, 16, 32, 48, 64, 80, ... 1, 17, 33, ...]
             let p = dst.add(i * (SO512I / SOI32) + j * vectorizable_elements * 4);
             _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
+        }
+        // Get remainders using byte loads
+        // TODO: consider doing 16-bit loads, if ts%4 >= 2
+        for k in (ts - ts % SOI32)..ts {
+            for l in 0..(SO512I / SOI32) {
+                *dst.add(l + k * vectorizable_elements) = *src.add(k + l * ts);
+
+            }
         }
     }
 }
