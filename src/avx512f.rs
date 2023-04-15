@@ -143,7 +143,7 @@ unsafe fn shuffle_tiled(
         // TODO: consider doing 16-bit loads, if ts%4 >= 2
         for k in (ts - ts % SOI32)..ts {
             for l in 0..total_elements {
-                *dst.add(l + k * vectorizable_elements) = *src.add(k + l * ts);
+                *dst.add(l + k * total_elements) = *src.add(k + l * ts);
             }
         }
     }
