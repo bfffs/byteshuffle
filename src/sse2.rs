@@ -46,6 +46,7 @@ unsafe fn shuffle2(
 
 /// SSE2 optimized shuffle for 16-byte type sizes
 #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[inline(never)]
 unsafe fn shuffle16(
     vectorizable_elements: usize,
     total_elements: usize,
@@ -139,8 +140,7 @@ pub unsafe fn shuffle(
        by the vectorized implementations, use the non-optimized version
        to finish them up. */
     if vectorizable_bytes < len {
-        todo!()
-      // crate::generic::shuffle(typesize, vectorizable_bytes, len, src, dst);
+        crate::generic::shuffle_partial(typesize, vectorizable_bytes, len, src, dst);
     }
 }
 

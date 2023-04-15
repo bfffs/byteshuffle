@@ -46,11 +46,24 @@ mod generic {
         src: *const u8,
         dst: *mut u8)
     {
+        shuffle_partial(typesize, 0, len, src, dst)
+    }
+
+    /// Shuffle the tail end of a mostly-shuffled block of data.  Begin `start` into
+    /// the buffer.
+    pub unsafe fn shuffle_partial(
+        typesize: usize,
+        start: usize,
+        len: usize,
+        src: *const u8,
+        dst: *mut u8)
+    {
+        let vectorizable_elements = start / typesize;
         let quot = len / typesize;
         let rem = len % typesize;
 
         for j in 0..typesize {
-            for i in 0..quot {
+            for i in vectorizable_elements..quot {
                 *dst.add(j * quot + i) = *src.add(i * typesize + j)
             }
         }

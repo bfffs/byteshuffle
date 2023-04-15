@@ -116,8 +116,7 @@ pub unsafe fn shuffle(
        by the vectorized implementations, use the non-optimized version
        to finish them up. */
     if vectorizable_bytes < len {
-        todo!()
-      // crate::generic::shuffle(typesize, vectorizable_bytes, len, src, dst);
+        crate::generic::shuffle_partial(typesize, vectorizable_bytes, len, src, dst);
     }
 }
 
