@@ -22,7 +22,8 @@ fn select_implementation() {
                 unsafe { SHUFFLE = avx512f::shuffle; }
             } else if is_x86_feature_detected!("avx2") {
                 unsafe { SHUFFLE = avx2::shuffle; }
-            } else if is_x86_feature_detected!("sse2") {
+            } else
+                if is_x86_feature_detected!("sse2") {
                 unsafe { SHUFFLE = sse2::shuffle; }
             } else {
                 unsafe { SHUFFLE = generic::shuffle; }
@@ -117,7 +118,7 @@ mod t {
         fn compare(
             #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)]
             typesize: usize,
-            #[values(64, 256, 1024, 4096)]
+            #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)]
             len: usize,
             #[case]
             f: unsafe fn(usize, usize, *const u8, *mut u8),
