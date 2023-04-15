@@ -139,7 +139,6 @@ mod t {
     mod shuffle {
         use rand::Rng;
         use rstest::rstest;
-        use super::*;
 
         #[rstest]
         #[case(16, 256)]
@@ -183,8 +182,6 @@ mod t {
             let src = (0..len)
                 .map(|i| (i % 256) as u8)
                 .collect::<Vec<u8>>();
-            // let src = (0u16..256)
-            //     .collect::<Vec<u16>>();
             let mut generic_dst = vec![0u8; len];
             let mut sse2_dst = vec![0u8; len];
             let srcp = src.as_ptr() as *const u8;

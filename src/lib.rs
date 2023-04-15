@@ -1,4 +1,5 @@
 #![feature(avx512_target_feature)]
+#![feature(stdsimd)]
 
 use std::mem;
 
@@ -16,7 +17,7 @@ fn select_implementation() {
     // Safe because ctor guarantees only one writer at a time
     cfg_if! {
         if #[cfg(any(target_arch = "x86_64", target_arch = "x86"))] {
-            if is_x86_feature_detected!("avx512f") {
+            if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw"){
                 unsafe { SHUFFLE = avx512f::shuffle; }
             } else if is_x86_feature_detected!("avx2") {
                 unsafe { SHUFFLE = avx2::shuffle; }
