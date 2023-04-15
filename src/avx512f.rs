@@ -99,7 +99,6 @@ unsafe fn shuffle_tiled(
     dst: *mut u8)
 {
     debug_assert_eq!(vectorizable_elements % 4, 0);
-    debug_assert_eq!(total_elements, vectorizable_elements, "TODO");
 
     let loadindex = _mm512_set_epi32(
         15 * ts as i32,
@@ -120,12 +119,12 @@ unsafe fn shuffle_tiled(
         0
     );
     let storeindex = _mm256_set_epi32(
-        (vectorizable_elements /4 * 3 * 16 / 4 + SOI32 * 2) as i32,
-        (vectorizable_elements /4 * 3 * 16 / 4) as i32,
-        (vectorizable_elements /4 * 16 / 2 + SOI32 * 2) as i32,
-        (vectorizable_elements /4 * 16 / 2) as i32,
-        (vectorizable_elements /4 * 16 / 4 + SOI32 * 2) as i32,
-        (vectorizable_elements /4 * 16 / 4) as i32,
+        (total_elements * 16 /4 * 3 / 4 + SOI32 * 2) as i32,
+        (total_elements * 16 /4 * 3 / 4) as i32,
+        (total_elements * 16 /4 / 2 + SOI32 * 2) as i32,
+        (total_elements * 16 /4 / 2) as i32,
+        (total_elements * 16 /4 / 4 + SOI32 * 2) as i32,
+        (total_elements * 16 /4 / 4) as i32,
         (SOI32 * 2) as i32,
         0
     );
@@ -137,7 +136,7 @@ unsafe fn shuffle_tiled(
             // zmm should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51, 64, 65, 66, 67...]
             zmm = shuffle_8x4(zmm);
             // zmm should look like [0, 16, 32, 48, 64, 80, ... 1, 17, 33, ...]
-            let p = dst.add(i * (SO512I / SOI32) + j * vectorizable_elements * 4);
+            let p = dst.add(i * (SO512I / SOI32) + j * total_elements * 4);
             _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
         }
         // Get remainders using byte loads
@@ -145,7 +144,6 @@ unsafe fn shuffle_tiled(
         for k in (ts - ts % SOI32)..ts {
             for l in 0..(SO512I / SOI32) {
                 *dst.add(l + k * vectorizable_elements) = *src.add(k + l * ts);
-
             }
         }
     }
