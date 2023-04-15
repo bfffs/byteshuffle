@@ -87,6 +87,63 @@ unsafe fn shuffle16(
     }
 }
 
+/// AVX512F optimized shuffle for type sizes of at least 16 bytes
+#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[target_feature(enable = "avx512f")]
+#[target_feature(enable = "avx512bw")]
+unsafe fn shuffle_tiled(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    ts: usize,
+    src: *const u8,
+    dst: *mut u8)
+{
+    debug_assert_eq!(vectorizable_elements % 4, 0);
+    debug_assert_eq!(total_elements, vectorizable_elements, "TODO");
+    debug_assert_eq!(ts % 4, 0, "TODO");
+
+    let loadindex = _mm512_set_epi32(
+        15 * ts as i32,
+        14 * ts as i32,
+        13 * ts as i32,
+        12 * ts as i32,
+        11 * ts as i32,
+        10 * ts as i32,
+        9 * ts as i32,
+        8 * ts as i32,
+        7 * ts as i32,
+        6 * ts as i32,
+        5 * ts as i32,
+        4 * ts as i32,
+        3 * ts as i32,
+        2 * ts as i32,
+        ts as i32,
+        0
+    );
+    let storeindex = _mm256_set_epi32(
+        (vectorizable_elements /4 * 3 * 16 / 4 + SOI32 * 2) as i32,
+        (vectorizable_elements /4 * 3 * 16 / 4) as i32,
+        (vectorizable_elements /4 * 16 / 2 + SOI32 * 2) as i32,
+        (vectorizable_elements /4 * 16 / 2) as i32,
+        (vectorizable_elements /4 * 16 / 4 + SOI32 * 2) as i32,
+        (vectorizable_elements /4 * 16 / 4) as i32,
+        (SOI32 * 2) as i32,
+        0
+    );
+
+    for i in 0..(vectorizable_elements / (SO512I / SOI32)) {
+        for j in 0..(ts / SOI32) {
+            let p = src.add(i * SOI32 * SO512I + j * 16 / SOI32) as *const u8;
+            let mut zmm = _mm512_i32gather_epi32(loadindex, p, 1);
+            // zmm should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51, 64, 65, 66, 67...]
+            zmm = shuffle_8x4(zmm);
+            // zmm should look like [0, 16, 32, 48, 64, 80, ... 1, 17, 33, ...]
+            let p = dst.add(i * (SO512I / SOI32) + j * vectorizable_elements * 4);
+            _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
+        }
+    }
+}
+
 pub unsafe fn shuffle(
     typesize: usize,
     len: usize,
@@ -107,6 +164,8 @@ pub unsafe fn shuffle(
 
     if typesize == 16 {
         shuffle16(vectorizable_elements, total_elements, src, dst);
+    } else if typesize > 16 {
+        shuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
         //TODO: maybe eliminate optimization for typesize=2, since bfffs does
         //not use it.
@@ -222,6 +281,41 @@ mod t {
             }
             assert_eq!(generic_dst, sse2_dst);
         }
+
+        #[rstest]
+        fn compare18x288() {
+            require_avx512f!();
+            let typesize = 18;
+            let len = 288;
+            let src = (0..len)
+                .map(|i| (i % 256) as u8)
+                .collect::<Vec<u8>>();
+            let mut generic_dst = vec![0u8; len];
+            let mut sse2_dst = vec![0u8; len];
+            unsafe {
+                crate::generic::shuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
+                crate::avx512f::shuffle(typesize, len, src.as_ptr(), sse2_dst.as_mut_ptr());
+            }
+            assert_eq!(generic_dst, sse2_dst);
+        }
+
+        #[rstest]
+        fn compare20x320() {
+            require_avx512f!();
+            let typesize = 20;
+            let len = 320;
+            let src = (0..len)
+                .map(|i| (i % 256) as u8)
+                .collect::<Vec<u8>>();
+            let mut generic_dst = vec![0u8; len];
+            let mut sse2_dst = vec![0u8; len];
+            unsafe {
+                crate::generic::shuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
+                crate::avx512f::shuffle(typesize, len, src.as_ptr(), sse2_dst.as_mut_ptr());
+            }
+            assert_eq!(generic_dst, sse2_dst);
+        }
+
     }
 }
 
