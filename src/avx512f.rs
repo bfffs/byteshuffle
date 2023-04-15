@@ -11,6 +11,9 @@ _mm512_permutexvar_epi32
 
 use std::mem;
 
+const SOI32: usize = mem::size_of::<i32>();
+const SO512I: usize = mem::size_of::<__m512i>();
+
 /// Helper that shuffles 8 32-bit ints
 #[target_feature(enable = "avx512f")]
 #[target_feature(enable = "avx512bw")]
@@ -41,8 +44,6 @@ unsafe fn shuffle16(
     debug_assert_eq!(total_elements, vectorizable_elements, "TODO");
 
     const TS: usize = 16;
-    const SOI32: usize = mem::size_of::<i32>();
-    const SO512I: usize = mem::size_of::<__m512i>();
 
     let loadindex = _mm512_set_epi32(
         15 * TS as i32,
@@ -92,7 +93,7 @@ pub unsafe fn shuffle(
     src: *const u8,
     dst: *mut u8)
 {
-    let vectorized_chunk_size = typesize / 4 * mem::size_of::<__m512i>();
+    let vectorized_chunk_size = typesize * SO512I / 4 ;
     let vectorizable_bytes = len - (len % vectorized_chunk_size);
     let vectorizable_elements = vectorizable_bytes / typesize;
     let total_elements = len / typesize;
@@ -205,6 +206,22 @@ mod t {
             assert_eq!(generic_dst, sse2_dst);
         }
 
+        #[rstest]
+        fn compare16x272() {
+            require_avx512f!();
+            let typesize = 16;
+            let len = 272;
+            let src = (0..len)
+                .map(|i| (i % 256) as u8)
+                .collect::<Vec<u8>>();
+            let mut generic_dst = vec![0u8; len];
+            let mut sse2_dst = vec![0u8; len];
+            unsafe {
+                crate::generic::shuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
+                crate::avx512f::shuffle(typesize, len, src.as_ptr(), sse2_dst.as_mut_ptr());
+            }
+            assert_eq!(generic_dst, sse2_dst);
+        }
     }
 }
 
