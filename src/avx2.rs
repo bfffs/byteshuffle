@@ -4,10 +4,14 @@ use core::arch::x86_64 as simd;
 #[cfg(target_arch = "x86")]
 use core::arch::x86 as simd;
 use simd::{
-    __m256i, _mm256_set_epi8, _mm256_loadu_si256, _mm256_unpacklo_epi8, _mm256_unpackhi_epi8, _mm256_unpacklo_epi16, _mm256_unpackhi_epi16, _mm256_unpacklo_epi32, _mm256_unpackhi_epi32, _mm256_permute4x64_epi64, _mm256_unpacklo_epi64, _mm256_unpackhi_epi64, _mm256_shuffle_epi8, _mm256_storeu_si256
+    __m256i, _mm256_set_epi8, _mm256_loadu_si256, _mm256_unpacklo_epi8, _mm256_unpackhi_epi8, _mm256_unpacklo_epi16, _mm256_unpackhi_epi16, _mm256_unpacklo_epi32, _mm256_unpackhi_epi32, _mm256_permute4x64_epi64, _mm256_unpacklo_epi64, _mm256_unpackhi_epi64, _mm256_shuffle_epi8, _mm256_storeu_si256,
+    __m128i, _mm256_loadu2_m128i
 };
 
 use std::mem;
+
+const SO256I: usize = mem::size_of::<__m256i>();
+const SO128I: usize = mem::size_of::<__m128i>();
 
 /// AVX2 optimized shuffle for 16-byte type sizes, 
 #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
@@ -19,7 +23,6 @@ unsafe fn shuffle16(
     dst: *mut u8)
 {
     const TS: usize = 16;
-    const SO256I: usize = mem::size_of::<__m256i>();
     let mut ymm0: [__m256i; 16] = mem::zeroed();
     let mut ymm1: [__m256i; 16] = mem::zeroed();
 
@@ -82,7 +85,97 @@ unsafe fn shuffle16(
     }
 }
 
-// Gather-load based implementation.  Unfortunately, it's slower than the other one.
+/// AVX2 optimized shuffle for type sizes greater than 16 bytes
+#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[target_feature(enable = "avx2")]
+unsafe fn shuffle_tiled(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    ts: usize,
+    src: *const u8,
+    dst: *mut u8)
+{
+    let mut ymm0: [__m256i; 16] = mem::zeroed();
+    let mut ymm1: [__m256i; 16] = mem::zeroed();
+    let vecs_rem = ts % SO128I;
+
+    /* Create the shuffle mask.
+       NOTE: The XMM/YMM 'set' intrinsics require the arguments to be ordered from
+       most to least significant (i.e., their order is reversed when compared to
+       loading the mask from an array). */
+    let shmask = _mm256_set_epi8(
+        0x0f, 0x07, 0x0e, 0x06, 0x0d, 0x05, 0x0c, 0x04,
+        0x0b, 0x03, 0x0a, 0x02, 0x09, 0x01, 0x08, 0x00,
+        0x0f, 0x07, 0x0e, 0x06, 0x0d, 0x05, 0x0c, 0x04,
+        0x0b, 0x03, 0x0a, 0x02, 0x09, 0x01, 0x08, 0x00);
+
+
+    for j in (0..vectorizable_elements).step_by(SO256I) {
+        /* Advance the offset into the type by the vector size (in bytes), unless this is
+        the initial iteration and the type size is not a multiple of the vector size.
+        In that case, only advance by the number of bytes necessary so that the number
+        of remaining bytes in the type will be a multiple of the vector size. */
+        let mut offset_into_type = 0;
+        while offset_into_type < ts {
+            /* Fetch elements in groups of 512 bytes */
+            for k in 0..16 {
+                let p0 = src.add(offset_into_type + (j + 2 * k + 1) * ts) as *const __m128i;
+                let p1 = src.add(offset_into_type + (j + 2 * k) * ts) as *const __m128i;
+                ymm0[k] = _mm256_loadu2_m128i(p0, p1);
+            }
+            /* Transpose bytes */
+            for k in 0..8 {
+                let l = 2 * k;
+                ymm1[k * 2] = _mm256_unpacklo_epi8(ymm0[l], ymm0[l + 1]);
+                ymm1[k * 2 + 1] = _mm256_unpackhi_epi8(ymm0[l], ymm0[l + 1]);
+            }
+            /* Transpose words */
+            let mut l = 0;
+            for k in 0..8 {
+                ymm0[k * 2] = _mm256_unpacklo_epi16(ymm1[l], ymm1[l + 2]);
+                ymm0[k * 2 + 1] = _mm256_unpackhi_epi16(ymm1[l], ymm1[l + 2]);
+                l += 1;
+                if k % 2 == 1 {
+                    l += 2;
+                }
+            }
+            /* Transpose double words */
+            l = 0;
+            for k in 0..8 {
+                ymm1[k * 2] = _mm256_unpacklo_epi32(ymm0[l], ymm0[l + 4]);
+                ymm1[k * 2 + 1] = _mm256_unpackhi_epi32(ymm0[l], ymm0[l + 4]);
+                l += 1;
+                if k % 4 == 3 {
+                    l += 4;
+                }
+            }
+            /* Transpose quad words */
+            for k in 0..8 {
+                ymm0[k * 2] = _mm256_unpacklo_epi64(ymm1[k], ymm1[k + 8]);
+                ymm0[k * 2 + 1] = _mm256_unpackhi_epi64(ymm1[k], ymm1[k + 8]);
+            }
+            for k in 0..16 {
+                ymm0[k] = _mm256_permute4x64_epi64(ymm0[k], 0xd8);
+                ymm0[k] = _mm256_shuffle_epi8(ymm0[k], shmask);
+            }
+            /* Store the result vectors */
+            for k in 0..16 {
+                let p = dst.add(j + total_elements * (offset_into_type + k)) as *mut __m256i;
+                _mm256_storeu_si256(p, ymm0[k]);
+            }
+            offset_into_type += if offset_into_type == 0 && vecs_rem > 0 {
+                vecs_rem 
+            } else {
+                SO128I
+            };
+        }
+    }
+}
+
+// Gather-load based implementation.  Unfortunately, it's slower than the other one, probably
+// because the _mm_i32gather_epi32 instruction is so slow.  On the plus side, it uses fewer
+// registers than the other one.
+//
 // /// AVX2 optimized shuffle for 16-byte type sizes, 
 // #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
 // #[target_feature(enable = "avx2")]
@@ -183,6 +276,8 @@ pub unsafe fn shuffle(
 
     if typesize == 16 {
         shuffle16(vectorizable_elements, total_elements, src, dst);
+    } else if typesize > SO128I {
+        shuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
         //TODO: maybe eliminate optimization for typesize=2, since bfffs does
         //not use it.
