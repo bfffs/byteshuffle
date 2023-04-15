@@ -30,68 +30,11 @@ unsafe fn shuffle_8x4(zmm: __m512i) -> __m512i {
     _mm512_permutexvar_epi32(shuf32, zmm1)
 }
 
-/// AVX512F optimized shuffle for 16-byte type sizes,
-#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
-#[target_feature(enable = "avx512f")]
-#[target_feature(enable = "avx512bw")]
-unsafe fn shuffle16(
-    vectorizable_elements: usize,
-    total_elements: usize,
-    src: *const u8,
-    dst: *mut u8)
-{
-    debug_assert_eq!(vectorizable_elements % 4, 0);
-    debug_assert_eq!(total_elements, vectorizable_elements, "TODO");
-
-    const TS: usize = 16;
-
-    let loadindex = _mm512_set_epi32(
-        15 * TS as i32,
-        14 * TS as i32,
-        13 * TS as i32,
-        12 * TS as i32,
-        11 * TS as i32,
-        10 * TS as i32,
-        9 * TS as i32,
-        8 * TS as i32,
-        7 * TS as i32,
-        6 * TS as i32,
-        5 * TS as i32,
-        4 * TS as i32,
-        3 * TS as i32,
-        2 * TS as i32,
-        TS as i32,
-        0
-    );
-    let storeindex = _mm256_set_epi32(
-        (vectorizable_elements /4 * 3 * TS / 4 + SOI32 * 2) as i32,
-        (vectorizable_elements /4 * 3 * TS / 4) as i32,
-        (vectorizable_elements /4 * TS / 2 + SOI32 * 2) as i32,
-        (vectorizable_elements /4 * TS / 2) as i32,
-        (vectorizable_elements /4 * TS / 4 + SOI32 * 2) as i32,
-        (vectorizable_elements /4 * TS / 4) as i32,
-        (SOI32 * 2) as i32,
-        0
-    );
-
-    for i in 0..(vectorizable_elements / (SO512I / SOI32)) {
-        for j in 0..(TS / SOI32) {
-            let p = src.add(i * SOI32 * SO512I + j * TS / SOI32) as *const u8;
-            let mut zmm = _mm512_i32gather_epi32(loadindex, p, 1);
-            // zmm should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51, 64, 65, 66, 67...]
-            zmm = shuffle_8x4(zmm);
-            // zmm should look like [0, 16, 32, 48, 64, 80, ... 1, 17, 33, ...]
-            let p = dst.add(i * (SO512I / SOI32) + j * vectorizable_elements * SO512I / TS);
-            _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
-        }
-    }
-}
-
 /// AVX512F optimized shuffle for type sizes of at least 16 bytes
 #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
 #[target_feature(enable = "avx512bw")]
-unsafe fn shuffle_tiled(
+unsafe fn shuffle_sg(
     vectorizable_elements: usize,
     total_elements: usize,
     ts: usize,
@@ -167,15 +110,7 @@ pub unsafe fn shuffle(
       return;
     }
 
-    if typesize == 16 {
-        shuffle16(vectorizable_elements, total_elements, src, dst);
-    } else if typesize > 16 {
-        shuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
-    } else {
-        //TODO: maybe eliminate optimization for typesize=2, since bfffs does
-        //not use it.
-        crate::generic::shuffle(typesize, len, src, dst)
-    }
+    shuffle_sg(vectorizable_elements, total_elements, typesize, src, dst);
 
     /* If the buffer had any bytes at the end which couldn't be handled
        by the vectorized implementations, use the non-optimized version
