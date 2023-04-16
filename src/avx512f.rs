@@ -43,6 +43,7 @@ unsafe fn shuffle_8x4(zmm: __m512i) -> __m512i {
 /// AVX-512F optimized shuffle for 2-byte type sizes,
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
+#[target_feature(enable = "avx512bw")]
 unsafe fn shuffle2(
     vectorizable_elements: usize,
     total_elements: usize,
