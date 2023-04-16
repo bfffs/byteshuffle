@@ -5,7 +5,22 @@ use core::arch::x86 as simd;
 use core::arch::x86_64 as simd;
 use std::mem;
 
-use simd::*;
+use simd::{
+    __m128i,
+    _mm_loadu_si128,
+    _mm_shuffle_epi32,
+    _mm_shufflehi_epi16,
+    _mm_shufflelo_epi16,
+    _mm_storeu_si128,
+    _mm_unpackhi_epi16,
+    _mm_unpackhi_epi32,
+    _mm_unpackhi_epi64,
+    _mm_unpackhi_epi8,
+    _mm_unpacklo_epi16,
+    _mm_unpacklo_epi32,
+    _mm_unpacklo_epi64,
+    _mm_unpacklo_epi8,
+};
 
 /// SSE2 optimized shuffle for 2-byte type sizes
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
