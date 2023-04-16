@@ -36,6 +36,49 @@ unsafe fn shuffle_8x4(zmm: __m512i) -> __m512i {
     _mm512_permutexvar_epi32(shuf32, zmm1)
 }
 
+/// AVX-512F optimized shuffle for 2-byte type sizes, 
+#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[target_feature(enable = "avx512f")]
+unsafe fn shuffle2(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8)
+{
+    const TS: usize = 2;
+    let mut zmm0: [__m512i; 16] = mem::zeroed();
+    let mut zmm1: [__m512i; 16] = mem::zeroed();
+    #[rustfmt::skip]
+    let shuf8 = _mm512_set_epi8(
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+    );
+
+    for j in (0..vectorizable_elements).step_by(SO512I) {
+        /* Fetch 64 elements (128 bytes) then transpose bytes, words and double words. */
+        for k in 0..2 {
+            let p = src.add(j * TS + k * SO512I) as *const __m512i;
+            zmm0[k] = _mm512_loadu_si512(p);
+            zmm1[k] = _mm512_shuffle_epi8(zmm0[k], shuf8);
+        }
+
+        zmm0[0] = _mm512_permute4x64_epi64(zmm1[0], 0xd8);
+        zmm0[1] = _mm512_permute4x64_epi64(zmm1[1], 0x8d);
+
+        zmm1[0] = _mm512_blend_epi32(zmm0[0], zmm0[1], 0xf0);
+        zmm0[1] = _mm512_blend_epi32(zmm0[0], zmm0[1], 0x0f);
+        zmm1[1] = _mm512_permute4x64_epi64(zmm0[1], 0x4e);
+
+        /* Store the result vectors */
+        for k in 0..2 {
+            let p = dst.add(j + k * total_elements) as *mut __m512i;
+            _mm512_storeu_si512(p, zmm1[k]);
+        }
+    }
+}
+
 /// AVX512F optimized shuffle for type sizes of at least 16 bytes
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
