@@ -1,7 +1,7 @@
 #![feature(avx512_target_feature)]
 #![feature(stdsimd)]
 
-use std::mem;
+use std::{mem, str::FromStr};
 
 use cfg_if::cfg_if;
 use ctor::ctor;
@@ -13,20 +13,76 @@ mod sse2;
 
 static mut SHUFFLE: unsafe fn(usize, usize, *const u8, *mut u8) = generic::shuffle;
 
+/// Explicitly specify an instruction set to use.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum SimdImpl {
+    /// Automatically determine the implementation to use
+    Auto,
+    /// Don't use any SIMD accelerations
+    Generic,
+    /// Use the SSE2 instruction set
+    Sse2,
+    /// Use the AVX2 instruction set
+    Avx2,
+    /// Use the AVX512F + AVX512BW instruction sets
+    Avx512F,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParseSimdImplErr;
+
+impl FromStr for SimdImpl {
+    type Err = ParseSimdImplErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "auto" => Ok(SimdImpl::Auto),
+            "generic" => Ok(SimdImpl::Generic),
+            "sse2" => Ok(SimdImpl::Sse2),
+            "avx2" => Ok(SimdImpl::Avx2),
+            "avx512f" => Ok(SimdImpl::Avx512F),
+            _ => Err(ParseSimdImplErr),
+        }
+    }
+}
+
 #[ctor]
-fn select_implementation() {
+fn select_implementation_ctor() {
+    // Safe because we're single-threaded before main
+    unsafe { select_implementation(SimdImpl::Auto) }
+}
+
+/// Force the use of a particular CPU instruction set, globally.
+///
+/// The default behavior is to automatically select, which should normally work best.  But this
+/// function may be used to force a lower instruction set for test and benchmarking purposes, or if
+/// one of the higher level optimizations does not work well.
+///
+/// # Safety
+///
+/// May not be called concurrently with any other function in this library.
+pub unsafe fn select_implementation(impl_: SimdImpl) {
     // Safe because ctor guarantees only one writer at a time
     cfg_if! {
         if #[cfg(any(target_arch = "x86_64", target_arch = "x86"))] {
-            if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw"){
-                unsafe { SHUFFLE = avx512f::shuffle; }
-            } else if is_x86_feature_detected!("avx2") {
-                unsafe { SHUFFLE = avx2::shuffle; }
-            } else
-                if is_x86_feature_detected!("sse2") {
-                unsafe { SHUFFLE = sse2::shuffle; }
-            } else {
-                unsafe { SHUFFLE = generic::shuffle; }
+            match impl_ {
+                SimdImpl::Auto => {
+                    if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw"){
+                        unsafe { SHUFFLE = avx512f::shuffle; }
+                    } else if is_x86_feature_detected!("avx2") {
+                        unsafe { SHUFFLE = avx2::shuffle; }
+                    } else
+                        if is_x86_feature_detected!("sse2") {
+                        unsafe { SHUFFLE = sse2::shuffle; }
+                    } else {
+                        unsafe { SHUFFLE = generic::shuffle; }
+                    }
+                },
+                SimdImpl::Generic => unsafe { SHUFFLE = generic::shuffle; },
+                SimdImpl::Sse2 => unsafe { SHUFFLE = sse2::shuffle; },
+                SimdImpl::Avx2 => unsafe { SHUFFLE = avx2::shuffle; },
+                SimdImpl::Avx512F => unsafe { SHUFFLE = avx512f::shuffle; },
             }
         } else {
             unsafe { SHUFFLE = generic::shuffle; }

@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::{env, str::FromStr, time::Duration};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use shuffle::shuffle_bytes;
+use shuffle::{shuffle_bytes, SimdImpl};
 
 struct Spec {
     name:     &'static str,
@@ -18,7 +18,20 @@ impl Spec {
     }
 }
 
+fn select_impl() {
+    match env::var("SHUFFLE_IMPL").map(|s| SimdImpl::from_str(s.as_str())) {
+        Ok(Ok(impl_)) => {
+            // Safe because we're single-threaded before main
+            unsafe { shuffle::select_implementation(impl_) }
+        }
+        _ => (),
+    }
+}
+
 fn shuffle_(c: &mut Criterion) {
+    // Ideally select_impl would only be called directly from main.
+    select_impl();
+
     let mut g = c.benchmark_group("shuffle");
     // These benchmarks are very small and I/O-lite.  Reduce Criterion's sampling time.
     g.warm_up_time(Duration::from_millis(100));
