@@ -10,10 +10,14 @@ use simd::{
     _mm256_set_epi32,
     _mm512_i32gather_epi32,
     _mm512_i32scatter_epi64,
+    _mm512_loadu_si512,
+    _mm512_permutex2var_epi64,
     _mm512_permutexvar_epi32,
     _mm512_set_epi32,
+    _mm512_set_epi64,
     _mm512_set_epi8,
     _mm512_shuffle_epi8,
+    _mm512_storeu_si512,
 };
 
 const SOI32: usize = mem::size_of::<i32>();
@@ -36,44 +40,43 @@ unsafe fn shuffle_8x4(zmm: __m512i) -> __m512i {
     _mm512_permutexvar_epi32(shuf32, zmm1)
 }
 
-/// AVX-512F optimized shuffle for 2-byte type sizes, 
-#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+/// AVX-512F optimized shuffle for 2-byte type sizes,
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
 unsafe fn shuffle2(
     vectorizable_elements: usize,
     total_elements: usize,
     src: *const u8,
-    dst: *mut u8)
-{
+    dst: *mut u8,
+) {
     const TS: usize = 2;
     let mut zmm0: [__m512i; 16] = mem::zeroed();
     let mut zmm1: [__m512i; 16] = mem::zeroed();
     #[rustfmt::skip]
     let shuf8 = _mm512_set_epi8(
-        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
-        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
-        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
-        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 0,
+        15, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 0,
+        15, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 0,
+        15, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 0,
     );
+    let idx0 = _mm512_set_epi64(0xe, 0xc, 0xa, 8, 6, 4, 2, 0);
+    let idx1 = _mm512_set_epi64(0xf, 0xd, 0xb, 9, 7, 5, 3, 1);
 
     for j in (0..vectorizable_elements).step_by(SO512I) {
-        /* Fetch 64 elements (128 bytes) then transpose bytes, words and double words. */
+        // Fetch 64 elements (128 bytes) then shuffle things into place.
         for k in 0..2 {
-            let p = src.add(j * TS + k * SO512I) as *const __m512i;
+            let p = src.add(j * TS + k * SO512I) as *const i32;
             zmm0[k] = _mm512_loadu_si512(p);
-            zmm1[k] = _mm512_shuffle_epi8(zmm0[k], shuf8);
+            // Shuffle within 128-bit lanes
+            zmm0[k] = _mm512_shuffle_epi8(zmm0[k], shuf8);
         }
+        // Permute 64-bit elements between lanes of two registers
+        zmm1[0] = _mm512_permutex2var_epi64(zmm0[0], idx0, zmm0[1]);
+        zmm1[1] = _mm512_permutex2var_epi64(zmm0[0], idx1, zmm0[1]);
 
-        zmm0[0] = _mm512_permute4x64_epi64(zmm1[0], 0xd8);
-        zmm0[1] = _mm512_permute4x64_epi64(zmm1[1], 0x8d);
-
-        zmm1[0] = _mm512_blend_epi32(zmm0[0], zmm0[1], 0xf0);
-        zmm0[1] = _mm512_blend_epi32(zmm0[0], zmm0[1], 0x0f);
-        zmm1[1] = _mm512_permute4x64_epi64(zmm0[1], 0x4e);
-
-        /* Store the result vectors */
+        // Store the result vectors
         for k in 0..2 {
-            let p = dst.add(j + k * total_elements) as *mut __m512i;
+            let p = dst.add(j + k * total_elements) as *mut i32;
             _mm512_storeu_si512(p, zmm1[k]);
         }
     }
@@ -154,7 +157,11 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
         return;
     }
 
-    shuffle_sg(vectorizable_elements, total_elements, typesize, src, dst);
+    if typesize == 2 {
+        shuffle2(vectorizable_elements, total_elements, src, dst);
+    } else {
+        shuffle_sg(vectorizable_elements, total_elements, typesize, src, dst);
+    }
 
     // If the buffer had any bytes at the end which couldn't be handled
     // by the vectorized implementations, use the non-optimized version
