@@ -1,6 +1,9 @@
 //! SSE-2 optimized routines
 #[cfg(target_arch = "x86_64")]
-use core::arch::x86_64::*;
+use core::arch::x86_64 as simd;
+#[cfg(target_arch = "x86")]
+use core::arch::x86 as simd;
+use simd::*;
 
 use std::mem;
 
