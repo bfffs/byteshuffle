@@ -139,7 +139,7 @@ mod t {
         use core::arch::x86_64 as simd;
         #[cfg(target_arch = "x86")]
         use core::arch::x86 as simd;
-        use simd::{_mm512_load_si512, _mm512_store_si512};
+        use simd::{_mm512_loadu_si512, _mm512_storeu_si512};
 
         #[rstest]
         fn t() {
@@ -153,12 +153,11 @@ mod t {
             let mut want = vec![0; 64];
             let mut actual = vec![0; 64];
             unsafe {
-                let x = _mm512_load_si512(input.as_ptr() as *const i32);
+                let x = _mm512_loadu_si512(input.as_ptr() as *const i32);
                 let y = shuffle_8x4(x);
                 crate::generic::shuffle(4, input.len(), input.as_ptr(), want.as_mut_ptr());
-                _mm512_store_si512(actual.as_mut_ptr() as *mut i32, y);
+                _mm512_storeu_si512(actual.as_mut_ptr() as *mut i32, y);
             }
-            //let want = _mm512_set_epi8(0, 16, 32, 48, 60, 80, 96, 112, 1, 17, 33, 49, 65, 81, 97, 113, 2, 18, 34, 50, 66, 82, 98, 114, 3, 19, 35, 51, 57, 83, 99, 115);
             assert_eq!(want, actual);
         }
     }
