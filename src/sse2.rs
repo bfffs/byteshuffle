@@ -1,27 +1,27 @@
 //! SSE-2 optimized routines
-#[cfg(target_arch = "x86_64")]
-use core::arch::x86_64 as simd;
 #[cfg(target_arch = "x86")]
 use core::arch::x86 as simd;
-use simd::*;
-
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64 as simd;
 use std::mem;
 
+use simd::*;
+
 /// SSE2 optimized shuffle for 2-byte type sizes
-#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn shuffle2(
     vectorizable_elements: usize,
     total_elements: usize,
     src: *const u8,
-    dst: *mut u8)
-{
+    dst: *mut u8,
+) {
     const TS: usize = 2;
     const SO128I: usize = mem::size_of::<__m128i>();
     let mut xmm0: [__m128i; 2] = mem::zeroed();
     let mut xmm1: [__m128i; 2] = mem::zeroed();
 
     for j in (0..vectorizable_elements).step_by(SO128I) {
-        /* Fetch 16 elements (32 bytes) then transpose bytes, words and double words. */
+        // Fetch 16 elements (32 bytes) then transpose bytes, words and double words.
         for k in 0..2 {
             let p = src.add(j * TS + k * SO128I) as *const __m128i;
             xmm0[k] = _mm_loadu_si128(p);
@@ -35,10 +35,10 @@ unsafe fn shuffle2(
             xmm0[k] = _mm_unpacklo_epi16(xmm0[k], xmm1[k]);
             xmm0[k] = _mm_shuffle_epi32(xmm0[k], 0xd8);
         }
-        /* Transpose quad words */
+        // Transpose quad words
         xmm1[0] = _mm_unpacklo_epi64(xmm0[0], xmm0[1]);
         xmm1[1] = _mm_unpackhi_epi64(xmm0[0], xmm0[1]);
-        /* Store the result vectors */
+        // Store the result vectors
         let dst_for_jth_element = dst.add(j);
         for k in 0..2 {
             let p = dst_for_jth_element.add(k * total_elements) as *mut __m128i;
@@ -48,14 +48,14 @@ unsafe fn shuffle2(
 }
 
 /// SSE2 optimized shuffle for 16-byte type sizes
-#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[inline(never)]
 unsafe fn shuffle16(
     vectorizable_elements: usize,
     total_elements: usize,
     src: *const u8,
-    dst: *mut u8)
-{
+    dst: *mut u8,
+) {
     const TS: usize = 16;
     const SO128I: usize = mem::size_of::<__m128i>();
     let mut xmm0: [__m128i; 16] = mem::zeroed();
@@ -66,13 +66,13 @@ unsafe fn shuffle16(
             let p = src.add(j * TS + k * SO128I) as *const __m128i;
             xmm0[k] = _mm_loadu_si128(p);
         }
-        /* Transpose bytes */
+        // Transpose bytes
         for k in 0..8 {
             let l = k * 2;
             xmm1[k * 2] = _mm_unpacklo_epi8(xmm0[l], xmm0[l + 1]);
             xmm1[k * 2 + 1] = _mm_unpackhi_epi8(xmm0[l], xmm0[l + 1]);
         }
-        /* Transpose words */
+        // Transpose words
         let mut l = 0;
         for k in 0..8 {
             xmm0[k * 2] = _mm_unpacklo_epi16(xmm1[l], xmm1[l + 2]);
@@ -82,7 +82,7 @@ unsafe fn shuffle16(
                 l += 2;
             }
         }
-        /* Transpose double words */
+        // Transpose double words
         l = 0;
         for k in 0..8 {
             xmm1[k * 2] = _mm_unpacklo_epi32(xmm0[l], xmm0[l + 4]);
@@ -92,12 +92,12 @@ unsafe fn shuffle16(
                 l += 4;
             }
         }
-        /* Transpose quad words */
+        // Transpose quad words
         for k in 0..8 {
             xmm0[k * 2] = _mm_unpacklo_epi64(xmm1[k], xmm1[k + 8]);
             xmm0[k * 2 + 1] = _mm_unpackhi_epi64(xmm1[k], xmm1[k + 8]);
         }
-        /* Store the result vectors */
+        // Store the result vectors
         let dst_for_jth_element = dst.add(j);
         for k in 0..16 {
             let p = dst_for_jth_element.add(k * total_elements) as *mut __m128i;
@@ -106,27 +106,22 @@ unsafe fn shuffle16(
     }
 }
 
-pub unsafe fn shuffle(
-    typesize: usize,
-    len: usize,
-    src: *const u8,
-    dst: *mut u8)
-{
+pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
     let vectorized_chunk_size = typesize * mem::size_of::<__m128i>();
-    /* If the blocksize is not a multiple of both the typesize and
-       the vector size, round the blocksize down to the next value
-       which is a multiple of both. The vectorized shuffle can be
-       used for that portion of the data, and the naive implementation
-       can be used for the remaining portion. */
+    // If the blocksize is not a multiple of both the typesize and
+    // the vector size, round the blocksize down to the next value
+    // which is a multiple of both. The vectorized shuffle can be
+    // used for that portion of the data, and the naive implementation
+    // can be used for the remaining portion.
     let vectorizable_bytes = len - (len % vectorized_chunk_size);
     let vectorizable_elements = vectorizable_bytes / typesize;
     let total_elements = len / typesize;
 
-    /* If the block size is too small to be vectorized,
-       use the generic implementation. */
+    // If the block size is too small to be vectorized,
+    // use the generic implementation.
     if len < vectorized_chunk_size {
-      crate::generic::shuffle(typesize, len, src, dst);
-      return;
+        crate::generic::shuffle(typesize, len, src, dst);
+        return;
     }
 
     if typesize == 2 {
@@ -134,14 +129,14 @@ pub unsafe fn shuffle(
     } else if typesize == 16 {
         shuffle16(vectorizable_elements, total_elements, src, dst);
     } else {
-        //TODO: maybe eliminate optimization for typesize=2, since bfffs does
-        //not use it.
+        // TODO: maybe eliminate optimization for typesize=2, since bfffs does
+        // not use it.
         crate::generic::shuffle(typesize, len, src, dst)
     }
 
-    /* If the buffer had any bytes at the end which couldn't be handled
-       by the vectorized implementations, use the non-optimized version
-       to finish them up. */
+    // If the buffer had any bytes at the end which couldn't be handled
+    // by the vectorized implementations, use the non-optimized version
+    // to finish them up.
     if vectorizable_bytes < len {
         crate::generic::shuffle_partial(typesize, vectorizable_bytes, len, src, dst);
     }
@@ -155,7 +150,7 @@ mod t {
                 eprintln!("Skipping: SSE2 unavailable.");
                 return;
             }
-        }
+        };
     }
 
     mod shuffle {

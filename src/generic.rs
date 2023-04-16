@@ -6,12 +6,7 @@ use std::ptr;
 ///
 /// # Safety
 /// src and dst must both be of exactly len bytes long.
-pub unsafe fn shuffle(
-    typesize: usize,
-    len: usize,
-    src: *const u8,
-    dst: *mut u8)
-{
+pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
     shuffle_partial(typesize, 0, len, src, dst)
 }
 
@@ -22,8 +17,8 @@ pub unsafe fn shuffle_partial(
     start: usize,
     len: usize,
     src: *const u8,
-    dst: *mut u8)
-{
+    dst: *mut u8,
+) {
     let vectorizable_elements = start / typesize;
     let quot = len / typesize;
     let rem = len % typesize;
@@ -40,12 +35,7 @@ pub unsafe fn shuffle_partial(
 ///
 /// # Safety
 /// src and dst must both be of exactly len bytes long.
-pub unsafe fn unshuffle(
-    typesize: usize,
-    len: usize,
-    src: *const u8,
-    dst: *mut u8)
-{
+pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
     let quot = len / typesize;
     let rem = len % typesize;
 
@@ -60,7 +50,7 @@ pub unsafe fn unshuffle(
 #[cfg(test)]
 mod t {
     use super::*;
-    
+
     mod shuffle {
         use super::*;
 
@@ -69,7 +59,7 @@ mod t {
         fn twobytwoplusone() {
             let src = [0x34u8, 0x12, 0x78, 0x56, 0x9a];
             let mut dst = [0u8; 5];
-            unsafe{ shuffle(2, src.len(), src.as_ptr(), dst.as_mut_ptr()) };
+            unsafe { shuffle(2, src.len(), src.as_ptr(), dst.as_mut_ptr()) };
             assert_eq!(dst, &[0x34, 0x78, 0x12, 0x56, 0x9a][..]);
         }
     }
@@ -82,7 +72,7 @@ mod t {
         fn twobytwoplusone() {
             let src = [0x34, 0x78, 0x12, 0x56, 0x9a];
             let mut dst = [0u8; 5];
-            unsafe{ unshuffle(2, src.len(), src.as_ptr(), dst.as_mut_ptr())};
+            unsafe { unshuffle(2, src.len(), src.as_ptr(), dst.as_mut_ptr()) };
             assert_eq!(dst, &[0x34u8, 0x12, 0x78, 0x56, 0x9a][..]);
         }
     }

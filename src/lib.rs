@@ -41,8 +41,12 @@ pub fn shuffle<T: Copy>(src: &[T], dst: &mut [T]) {
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        SHUFFLE(ts, src.len() * ts,
-            src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
+        SHUFFLE(
+            ts,
+            src.len() * ts,
+            src.as_ptr() as *const u8,
+            dst.as_ptr() as *mut u8,
+        );
     }
 }
 
@@ -52,8 +56,12 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     // Safe because of the first assertion.
     unsafe {
-        SHUFFLE(typesize, src.len(),
-            src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
+        SHUFFLE(
+            typesize,
+            src.len(),
+            src.as_ptr() as *const u8,
+            dst.as_ptr() as *mut u8,
+        );
     }
 }
 
@@ -64,16 +72,24 @@ pub fn unshuffle<T: Copy>(src: &[T], dst: &mut [T]) {
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        generic::unshuffle(ts, src.len() * ts,
-            src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
+        generic::unshuffle(
+            ts,
+            src.len() * ts,
+            src.as_ptr() as *const u8,
+            dst.as_ptr() as *mut u8,
+        );
     }
 }
 
 pub fn unshuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     unsafe {
-        generic::unshuffle(typesize, src.len(),
-            src.as_ptr() as *const u8, dst.as_ptr() as *mut u8);
+        generic::unshuffle(
+            typesize,
+            src.len(),
+            src.as_ptr() as *const u8,
+            dst.as_ptr() as *mut u8,
+        );
     }
 }
 
@@ -116,16 +132,11 @@ mod t {
                         is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
                         )]
         fn compare(
-            #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)]
-            typesize: usize,
-            #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)]
-            len: usize,
-            #[case]
-            f: unsafe fn(usize, usize, *const u8, *mut u8),
-            #[case]
-            has_feature: bool
-            )
-        {
+            #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
+            #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
+            #[case] f: unsafe fn(usize, usize, *const u8, *mut u8),
+            #[case] has_feature: bool,
+        ) {
             if !has_feature {
                 eprintln!("Skipping: CPU feature unavailable.");
                 return;
@@ -163,7 +174,10 @@ mod t {
             let src = [0x00cc8844, 0xffbb7733, 0xeeaa6622, 0xdd995511];
             let mut dst = [0u32; 4];
             unshuffle(&src[..], &mut dst[..]);
-            assert_eq!(dst, &[0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00][..]);
+            assert_eq!(
+                dst,
+                &[0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00][..]
+            );
         }
     }
 }
