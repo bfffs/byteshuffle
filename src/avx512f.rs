@@ -51,8 +51,8 @@ unsafe fn shuffle2(
     dst: *mut u8,
 ) {
     const TS: usize = 2;
-    let mut zmm0: [__m512i; 16] = mem::zeroed();
-    let mut zmm1: [__m512i; 16] = mem::zeroed();
+    let mut zmm0: [__m512i; 2] = mem::zeroed();
+    let mut zmm1: [__m512i; 2] = mem::zeroed();
     #[rustfmt::skip]
     let shuf8 = _mm512_set_epi8(
         15, 13, 11, 9, 7, 5, 3, 1, 14, 12, 10, 8, 6, 4, 2, 0,
