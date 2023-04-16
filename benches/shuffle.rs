@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use shuffle::shuffle_bytes;
 
@@ -18,6 +20,9 @@ impl Spec {
 
 fn shuffle_(c: &mut Criterion) {
     let mut g = c.benchmark_group("shuffle");
+    // These benchmarks are very small and I/O-lite.  Reduce Criterion's sampling time.
+    g.warm_up_time(Duration::from_millis(100));
+    g.measurement_time(Duration::from_millis(100));
 
     for spec in [
         Spec::new("two", 2, 4096),
