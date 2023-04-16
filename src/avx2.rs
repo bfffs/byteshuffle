@@ -5,13 +5,59 @@ use core::arch::x86_64 as simd;
 use core::arch::x86 as simd;
 use simd::{
     __m256i, _mm256_set_epi8, _mm256_loadu_si256, _mm256_unpacklo_epi8, _mm256_unpackhi_epi8, _mm256_unpacklo_epi16, _mm256_unpackhi_epi16, _mm256_unpacklo_epi32, _mm256_unpackhi_epi32, _mm256_permute4x64_epi64, _mm256_unpacklo_epi64, _mm256_unpackhi_epi64, _mm256_shuffle_epi8, _mm256_storeu_si256,
-    __m128i, _mm256_loadu2_m128i
+    __m128i, _mm256_loadu2_m128i,
+    _mm256_blend_epi32
 };
 
 use std::mem;
 
 const SO256I: usize = mem::size_of::<__m256i>();
 const SO128I: usize = mem::size_of::<__m128i>();
+
+/// AVX2 optimized shuffle for 2-byte type sizes, 
+#[allow(clippy::needless_range_loop)]   // I don't like this suggestion
+#[target_feature(enable = "avx2")]
+unsafe fn shuffle2(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8)
+{
+    const TS: usize = 2;
+    let mut ymm0: [__m256i; 16] = mem::zeroed();
+    let mut ymm1: [__m256i; 16] = mem::zeroed();
+    /* Create the shuffle mask.
+       NOTE: The XMM/YMM 'set' intrinsics require the arguments to be ordered from
+       most to least significant (i.e., their order is reversed when compared to
+       loading the mask from an array). */
+    let shmask = _mm256_set_epi8(
+        0x0f, 0x0d, 0x0b, 0x09, 0x07, 0x05, 0x03, 0x01,
+        0x0e, 0x0c, 0x0a, 0x08, 0x06, 0x04, 0x02, 0x00,
+        0x0f, 0x0d, 0x0b, 0x09, 0x07, 0x05, 0x03, 0x01,
+        0x0e, 0x0c, 0x0a, 0x08, 0x06, 0x04, 0x02, 0x00);
+
+    for j in (0..vectorizable_elements).step_by(SO256I) {
+        /* Fetch 32 elements (64 bytes) then transpose bytes, words and double words. */
+        for k in 0..2 {
+            let p = src.add(j * TS + k * SO256I) as *const __m256i;
+            ymm0[k] = _mm256_loadu_si256(p);
+            ymm1[k] = _mm256_shuffle_epi8(ymm0[k], shmask);
+        }
+
+        ymm0[0] = _mm256_permute4x64_epi64(ymm1[0], 0xd8);
+        ymm0[1] = _mm256_permute4x64_epi64(ymm1[1], 0x8d);
+
+        ymm1[0] = _mm256_blend_epi32(ymm0[0], ymm0[1], 0xf0);
+        ymm0[1] = _mm256_blend_epi32(ymm0[0], ymm0[1], 0x0f);
+        ymm1[1] = _mm256_permute4x64_epi64(ymm0[1], 0x4e);
+
+        /* Store the result vectors */
+        for k in 0..2 {
+            let p = dst.add(j + k * total_elements) as *mut __m256i;
+            _mm256_storeu_si256(p, ymm1[k]);
+        }
+    }
+}
 
 /// AVX2 optimized shuffle for 16-byte type sizes, 
 #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
@@ -274,7 +320,9 @@ pub unsafe fn shuffle(
       return;
     }
 
-    if typesize == 16 {
+    if typesize == 2 {
+        shuffle2(vectorizable_elements, total_elements, src, dst);
+    } else if typesize == 16 {
         shuffle16(vectorizable_elements, total_elements, src, dst);
     } else if typesize > SO128I {
         shuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
