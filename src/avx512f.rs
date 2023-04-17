@@ -135,12 +135,12 @@ unsafe fn shuffle_sg(
             let p = dst.add(i * 16 + j * total_elements * 4);
             _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
         }
-        // Get remainders using byte loads
-        // TODO: consider doing 16-bit loads, if ts%4 >= 2
-        for k in (ts - ts % SOI32)..ts {
-            for l in 0..total_elements {
-                *dst.add(l + k * total_elements) = *src.add(k + l * ts);
-            }
+    }
+    // Get remainders using byte loads
+    // TODO: consider doing 16-bit loads, if ts%4 >= 2
+    for k in (ts - ts % SOI32)..ts {
+        for l in 0..total_elements {
+            *dst.add(l + k * total_elements) = *src.add(k + l * ts);
         }
     }
 }
