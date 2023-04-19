@@ -13,14 +13,22 @@ use simd::{
     _mm512_i32scatter_epi64,
     _mm512_loadu_si512,
     _mm512_permutex2var_epi64,
-    _mm512_permutexvar_epi32,
     _mm512_set_epi32,
     _mm512_set_epi64,
     _mm512_set_epi8,
     _mm512_shuffle_epi8,
-    _mm512_storeu_si512,
     _mm_set_epi8,
     _mm_storeu_si128,
+    _mm512_storeu_si512,
+    _mm512_unpackhi_epi64,
+    _mm512_unpackhi_epi32,
+    _mm512_unpackhi_epi16,
+    _mm512_unpackhi_epi8,
+    _mm512_unpacklo_epi64,
+    _mm512_unpacklo_epi32,
+    _mm512_unpacklo_epi16,
+    _mm512_unpacklo_epi8,
+_mm512_permutexvar_epi32
 };
 
 const SOI32: usize = mem::size_of::<i32>();
@@ -82,6 +90,95 @@ unsafe fn shuffle2(
         for k in 0..2 {
             let p = dst.add(j + k * total_elements) as *mut i32;
             _mm512_storeu_si512(p, zmm1[k]);
+        }
+    }
+}
+
+/// AVX512F optimized shuffle for 16-byte type sizes
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
+#[target_feature(enable = "avx512f")]
+#[target_feature(enable = "avx512bw")]
+unsafe fn shuffle16(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    const TS: usize = 16;
+    let mut zmm0: [__m512i; TS] = mem::zeroed();
+    let mut zmm1: [__m512i; TS] = mem::zeroed();
+    let mut zmm2: [__m512i; TS] = mem::zeroed();
+    let mut zmm3: [__m512i; TS] = mem::zeroed();
+    let mut zmm4: [__m512i; TS] = mem::zeroed();
+    let mut zmm5: [__m512i; TS] = mem::zeroed();
+    let mut zmm6: [__m512i; TS] = mem::zeroed();
+
+    #[rustfmt::skip]
+    let shmask = _mm512_set_epi8(
+        0x1f, 0x0f, 0x1e, 0x0e, 0x1d, 0x0d, 0x1c, 0x0c,
+        0x1b, 0x0b, 0x1a, 0x0a, 0x19, 0x09, 0x18, 0x08,
+        0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04,
+        0x13, 0x03, 0x12, 0x02, 0x11, 0x01, 0x10, 0x00,
+        0x1f, 0x0f, 0x1e, 0x0e, 0x1d, 0x0d, 0x1c, 0x0c,
+        0x1b, 0x0b, 0x1a, 0x0a, 0x19, 0x09, 0x18, 0x08,
+        0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04,
+        0x13, 0x03, 0x12, 0x02, 0x11, 0x01, 0x10, 0x00);
+    let shuf32 = _mm512_set_epi32(
+        15, 11, 7, 3,
+        14, 10, 6, 2,
+        13, 9, 5, 1,
+        12, 8, 4, 0,
+        );
+
+    for j in (0..vectorizable_elements).step_by(SO512I) {
+        for k in 0..TS {
+            let p = src.add(j * TS + k * SO512I) as *const i32;
+            zmm0[k] = _mm512_loadu_si512(p);
+            // NB: can some steps be replaced by _mm512_permutexvar_epi8 with AVX512-VBMI?
+        }
+        for k in 0..(TS/2) {
+            zmm1[k * 2] = _mm512_unpacklo_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
+            zmm1[k * 2 + 1] = _mm512_unpackhi_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
+        }
+        //for k in 0..(TS/4) {
+            //zmm2[k * 2] = _mm512_unpacklo_epi8(zmm1[k * 4], zmm1[k * 4 + 1]);
+            //zmm2[k * 2 + 1] = _mm512_unpackhi_epi8(zmm1[k * 4], zmm1[k * 4 + 1]);
+        //}
+
+        let mut l = 0;
+        for k in 0..(TS/2) {
+            zmm2[k * 2] = _mm512_unpacklo_epi16(zmm1[l], zmm1[l + 2]);
+            zmm2[k * 2 + 1] = _mm512_unpackhi_epi16(zmm1[l], zmm1[l + 2]);
+            l += 1;
+            if k % 2 == 1 {
+                l += 2;
+            }
+        }
+
+        l = 0;
+        for k in 0..(TS/2) {
+            zmm3[k * 2] = _mm512_unpacklo_epi32(zmm2[l], zmm2[l + 4]);
+            zmm3[k * 2 + 1] = _mm512_unpackhi_epi32(zmm2[l], zmm2[l + 4]);
+            l += 1;
+            if k % 4 == 3 {
+                l += 4;
+            }
+        }
+
+        for k in 0..(TS / 2) {
+            zmm4[k * 2] = _mm512_unpacklo_epi64(zmm3[k], zmm3[k + 8]);
+            zmm4[k * 2 + 1] = _mm512_unpackhi_epi64(zmm3[k], zmm3[k + 8]);
+        }
+
+        for k in 0..TS {
+            zmm5[k] = _mm512_permutexvar_epi32(shuf32, zmm4[k]);
+            zmm6[k] = _mm512_shuffle_epi8(zmm5[k], shmask);
+        }
+
+        //TODO: shuffle 128 and 256 bit lanes
+        for k in 0..TS {
+            let p = dst.add(j + k * total_elements) as *mut i32;
+            _mm512_storeu_si512(p, zmm5[k]);
         }
     }
 }
@@ -185,6 +282,8 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
 
     if typesize == 2 {
         shuffle2(vectorizable_elements, total_elements, src, dst);
+    } else if typesize == 16{
+        shuffle16(vectorizable_elements, total_elements, src, dst);
     } else {
         shuffle_sg(vectorizable_elements, total_elements, typesize, src, dst);
     }
@@ -267,11 +366,11 @@ mod t {
 
         // This test is redundant with the randomly generated one, but easier to debug.
         #[rstest]
-        fn compare16x256() {
+        fn compare16x1024() {
             require_avx512f!();
             let typesize = 16;
-            let len = 256;
-            let src = (0..len).map(|i| (i % 256) as u8).collect::<Vec<u8>>();
+            let len = 1024;
+            let src = (0..len).map(|i| i.min(255) as u8).collect::<Vec<u8>>();
             let mut generic_dst = vec![0u8; len];
             let mut sse2_dst = vec![0u8; len];
             unsafe {

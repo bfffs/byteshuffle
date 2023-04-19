@@ -47,6 +47,7 @@ fn shuffle_(c: &mut Criterion) {
         Spec::new("ridt-43", 43, 17255),
         Spec::new("ridt-47", 47, 15240),
         Spec::new("alloct-18", 18, 11478),
+        Spec::new("256", 256, 65536),
     ]
     .iter()
     {
