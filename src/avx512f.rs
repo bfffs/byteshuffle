@@ -115,14 +115,10 @@ unsafe fn shuffle16(
 
     #[rustfmt::skip]
     let shmask = _mm512_set_epi8(
-        0x1f, 0x0f, 0x1e, 0x0e, 0x1d, 0x0d, 0x1c, 0x0c,
-        0x1b, 0x0b, 0x1a, 0x0a, 0x19, 0x09, 0x18, 0x08,
-        0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04,
-        0x13, 0x03, 0x12, 0x02, 0x11, 0x01, 0x10, 0x00,
-        0x1f, 0x0f, 0x1e, 0x0e, 0x1d, 0x0d, 0x1c, 0x0c,
-        0x1b, 0x0b, 0x1a, 0x0a, 0x19, 0x09, 0x18, 0x08,
-        0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04,
-        0x13, 0x03, 0x12, 0x02, 0x11, 0x01, 0x10, 0x00);
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0);
     let shuf32 = _mm512_set_epi32(
         15, 11, 7, 3,
         14, 10, 6, 2,
@@ -134,16 +130,11 @@ unsafe fn shuffle16(
         for k in 0..TS {
             let p = src.add(j * TS + k * SO512I) as *const i32;
             zmm0[k] = _mm512_loadu_si512(p);
-            // NB: can some steps be replaced by _mm512_permutexvar_epi8 with AVX512-VBMI?
         }
         for k in 0..(TS/2) {
             zmm1[k * 2] = _mm512_unpacklo_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
             zmm1[k * 2 + 1] = _mm512_unpackhi_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
         }
-        //for k in 0..(TS/4) {
-            //zmm2[k * 2] = _mm512_unpacklo_epi8(zmm1[k * 4], zmm1[k * 4 + 1]);
-            //zmm2[k * 2 + 1] = _mm512_unpackhi_epi8(zmm1[k * 4], zmm1[k * 4 + 1]);
-        //}
 
         let mut l = 0;
         for k in 0..(TS/2) {
@@ -171,6 +162,7 @@ unsafe fn shuffle16(
         }
 
         for k in 0..TS {
+            // NB: these two steps can be replaced by _mm512_permutexvar_epi8 with AVX512-VBMI
             zmm5[k] = _mm512_permutexvar_epi32(shuf32, zmm4[k]);
             zmm6[k] = _mm512_shuffle_epi8(zmm5[k], shmask);
         }
@@ -178,7 +170,7 @@ unsafe fn shuffle16(
         //TODO: shuffle 128 and 256 bit lanes
         for k in 0..TS {
             let p = dst.add(j + k * total_elements) as *mut i32;
-            _mm512_storeu_si512(p, zmm5[k]);
+            _mm512_storeu_si512(p, zmm6[k]);
         }
     }
 }
