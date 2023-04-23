@@ -107,11 +107,6 @@ unsafe fn shuffle16(
     const TS: usize = 16;
     let mut zmm0: [__m512i; TS] = mem::zeroed();
     let mut zmm1: [__m512i; TS] = mem::zeroed();
-    let mut zmm2: [__m512i; TS] = mem::zeroed();
-    let mut zmm3: [__m512i; TS] = mem::zeroed();
-    let mut zmm4: [__m512i; TS] = mem::zeroed();
-    let mut zmm5: [__m512i; TS] = mem::zeroed();
-    let mut zmm6: [__m512i; TS] = mem::zeroed();
 
     #[rustfmt::skip]
     let shmask = _mm512_set_epi8(
@@ -138,8 +133,8 @@ unsafe fn shuffle16(
 
         let mut l = 0;
         for k in 0..(TS/2) {
-            zmm2[k * 2] = _mm512_unpacklo_epi16(zmm1[l], zmm1[l + 2]);
-            zmm2[k * 2 + 1] = _mm512_unpackhi_epi16(zmm1[l], zmm1[l + 2]);
+            zmm0[k * 2] = _mm512_unpacklo_epi16(zmm1[l], zmm1[l + 2]);
+            zmm0[k * 2 + 1] = _mm512_unpackhi_epi16(zmm1[l], zmm1[l + 2]);
             l += 1;
             if k % 2 == 1 {
                 l += 2;
@@ -148,8 +143,8 @@ unsafe fn shuffle16(
 
         l = 0;
         for k in 0..(TS/2) {
-            zmm3[k * 2] = _mm512_unpacklo_epi32(zmm2[l], zmm2[l + 4]);
-            zmm3[k * 2 + 1] = _mm512_unpackhi_epi32(zmm2[l], zmm2[l + 4]);
+            zmm1[k * 2] = _mm512_unpacklo_epi32(zmm0[l], zmm0[l + 4]);
+            zmm1[k * 2 + 1] = _mm512_unpackhi_epi32(zmm0[l], zmm0[l + 4]);
             l += 1;
             if k % 4 == 3 {
                 l += 4;
@@ -157,20 +152,20 @@ unsafe fn shuffle16(
         }
 
         for k in 0..(TS / 2) {
-            zmm4[k * 2] = _mm512_unpacklo_epi64(zmm3[k], zmm3[k + 8]);
-            zmm4[k * 2 + 1] = _mm512_unpackhi_epi64(zmm3[k], zmm3[k + 8]);
+            zmm0[k * 2] = _mm512_unpacklo_epi64(zmm1[k], zmm1[k + 8]);
+            zmm0[k * 2 + 1] = _mm512_unpackhi_epi64(zmm1[k], zmm1[k + 8]);
         }
 
         for k in 0..TS {
             // NB: these two steps can be replaced by _mm512_permutexvar_epi8 with AVX512-VBMI
-            zmm5[k] = _mm512_permutexvar_epi32(shuf32, zmm4[k]);
-            zmm6[k] = _mm512_shuffle_epi8(zmm5[k], shmask);
+            zmm1[k] = _mm512_permutexvar_epi32(shuf32, zmm0[k]);
+            zmm0[k] = _mm512_shuffle_epi8(zmm1[k], shmask);
         }
 
         //TODO: shuffle 128 and 256 bit lanes
         for k in 0..TS {
             let p = dst.add(j + k * total_elements) as *mut i32;
-            _mm512_storeu_si512(p, zmm6[k]);
+            _mm512_storeu_si512(p, zmm0[k]);
         }
     }
 }
