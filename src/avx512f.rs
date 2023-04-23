@@ -223,6 +223,9 @@ unsafe fn shuffle_sg(
             _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
         }
     }
+
+    // For typesizes that aren't a multiple of four, the remaining bytes can be shuffled like this.
+    // But it's too slow to be worthwhile.
     // Get remainders using byte loads
     // TODO: consider doing 16-bit loads, if ts%4 >= 2
     for k in (ts - ts % SOI32)..ts {
@@ -255,32 +258,32 @@ unsafe fn shuffle_sg(
 }
 
 pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
+    let total_elements = len / typesize;
     let vectorized_chunk_size = typesize * SO512I;
     let vectorizable_bytes = len - (len % vectorized_chunk_size);
     let vectorizable_elements = vectorizable_bytes / typesize;
-    let total_elements = len / typesize;
+    let sg_chunk_size = typesize * SO512I / 4;
+    let sg_bytes = len - (len % sg_chunk_size);
+    let sg_elements = sg_bytes / typesize;
 
-    // If the block size is too small to be vectorized,
-    // use the generic implementation.
-    if len < vectorized_chunk_size {
-        crate::generic::shuffle(typesize, len, src, dst);
-        return;
-    }
-
-    if typesize == 2 {
+    let vectorized_bytes = if typesize == 2 && len >= vectorized_chunk_size {
         shuffle2(vectorizable_elements, total_elements, src, dst);
-    } else if typesize == 16{
+        vectorizable_bytes
+    } else if typesize == 16 && len >= vectorized_chunk_size {
         shuffle16(vectorizable_elements, total_elements, src, dst);
+        vectorizable_bytes
+    } else if typesize % 4 == 0 && len >= sg_chunk_size {
+        shuffle_sg(sg_elements, total_elements, typesize, src, dst);
+        sg_bytes
     } else {
-        // XXX shuffle_sg can actually operate on vectorized_chunk size of typesize * SO512I / 4
-        shuffle_sg(vectorizable_elements, total_elements, typesize, src, dst);
-    }
+        return crate::avx2::shuffle(typesize, len, src, dst);
+    };
 
     // If the buffer had any bytes at the end which couldn't be handled
     // by the vectorized implementations, use the non-optimized version
     // to finish them up.
-    if vectorizable_bytes < len {
-        crate::generic::shuffle_partial(typesize, vectorizable_bytes, len, src, dst);
+    if vectorized_bytes < len {
+        crate::generic::shuffle_partial(typesize, vectorized_bytes, len, src, dst);
     }
 }
 
