@@ -28,7 +28,8 @@ use simd::{
     _mm512_unpacklo_epi32,
     _mm512_unpacklo_epi16,
     _mm512_unpacklo_epi8,
-_mm512_permutexvar_epi32
+_mm512_permutexvar_epi32,
+    _mm512_permutexvar_epi8
 };
 
 const SOI32: usize = mem::size_of::<i32>();
@@ -98,6 +99,7 @@ unsafe fn shuffle2(
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
 #[target_feature(enable = "avx512bw")]
+#[target_feature(enable = "avx512vbmi")]
 unsafe fn shuffle16(
     vectorizable_elements: usize,
     total_elements: usize,
@@ -119,6 +121,24 @@ unsafe fn shuffle16(
         14, 10, 6, 2,
         13, 9, 5, 1,
         12, 8, 4, 0,
+        );
+    let shuf8 = _mm512_set_epi8(
+        63, 47, 31, 15,
+        62, 46, 30, 14,
+        61, 45, 29, 13,
+        60, 44, 28, 12,
+        59, 43, 27, 11,
+        58, 42, 26, 10,
+        57, 41, 25, 9,
+        56, 40, 24, 8,
+        55, 39, 23, 7,
+        54, 38, 22, 6,
+        53, 37, 21, 5,
+        52, 36, 20, 4,
+        51, 35, 19, 3,
+        50, 34, 18, 2,
+        49, 33, 17, 1,
+        48, 32, 16, 0,
         );
 
     for j in (0..vectorizable_elements).step_by(SO512I) {
@@ -158,8 +178,9 @@ unsafe fn shuffle16(
 
         for k in 0..TS {
             // NB: these two steps can be replaced by _mm512_permutexvar_epi8 with AVX512-VBMI
-            zmm1[k] = _mm512_permutexvar_epi32(shuf32, zmm0[k]);
-            zmm0[k] = _mm512_shuffle_epi8(zmm1[k], shmask);
+            zmm0[k] = _mm512_permutexvar_epi8(shuf8, zmm0[k]);
+            // zmm1[k] = _mm512_permutexvar_epi32(shuf32, zmm0[k]);
+            // zmm0[k] = _mm512_shuffle_epi8(zmm1[k], shmask);
         }
 
         //TODO: shuffle 128 and 256 bit lanes
