@@ -105,8 +105,6 @@ unsafe fn shuffle16(
     dst: *mut u8,
 ) {
     const TS: usize = 16;
-    let mut zmm0: [__m512i; TS] = mem::zeroed();
-    let mut zmm1: [__m512i; TS] = mem::zeroed();
 
     #[rustfmt::skip]
     let shmask = _mm512_set_epi8(
@@ -122,14 +120,42 @@ unsafe fn shuffle16(
         );
 
     for j in (0..vectorizable_elements).step_by(SO512I) {
-        for k in 0..TS {
-            let p = src.add(j * TS + k * SO512I) as *const i32;
-            zmm0[k] = _mm512_loadu_si512(p);
-        }
-        for k in 0..(TS/2) {
-            zmm1[k * 2] = _mm512_unpacklo_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
-            zmm1[k * 2 + 1] = _mm512_unpackhi_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
-        }
+        let mut zmm0: [__m512i; TS] = [
+            _mm512_loadu_si512(src.add(j * TS + 0 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 1 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 2 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 3 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 4 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 5 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 6 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 7 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 8 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 9 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 10 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 11 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 12 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 13 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 14 * SO512I) as *const i32),
+            _mm512_loadu_si512(src.add(j * TS + 15 * SO512I) as *const i32),
+        ];
+        let mut zmm1: [__m512i; TS] = [
+            _mm512_unpacklo_epi8(zmm0[0 * 2], zmm0[0 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[0 * 2], zmm0[0 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[1 * 2], zmm0[1 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[1 * 2], zmm0[1 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[2 * 2], zmm0[2 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[2 * 2], zmm0[2 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[3 * 2], zmm0[3 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[3 * 2], zmm0[3 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[4 * 2], zmm0[4 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[4 * 2], zmm0[4 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[5 * 2], zmm0[5 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[5 * 2], zmm0[5 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[6 * 2], zmm0[6 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[6 * 2], zmm0[6 * 2 + 1]),
+            _mm512_unpacklo_epi8(zmm0[7 * 2], zmm0[7 * 2 + 1]),
+            _mm512_unpackhi_epi8(zmm0[7 * 2], zmm0[7 * 2 + 1]),
+        ];
 
         let mut l = 0;
         for k in 0..(TS/2) {
