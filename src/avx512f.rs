@@ -260,7 +260,7 @@ unsafe fn shuffle_sg(
 }
 
 pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
-    let vectorized_chunk_size = typesize * SO512I / 4;
+    let vectorized_chunk_size = typesize * SO512I;
     let vectorizable_bytes = len - (len % vectorized_chunk_size);
     let vectorizable_elements = vectorizable_bytes / typesize;
     let total_elements = len / typesize;
@@ -277,6 +277,7 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     } else if typesize == 16{
         shuffle16(vectorizable_elements, total_elements, src, dst);
     } else {
+        // XXX shuffle_sg can actually operate on vectorized_chunk size of typesize * SO512I / 4
         shuffle_sg(vectorizable_elements, total_elements, typesize, src, dst);
     }
 
