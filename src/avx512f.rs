@@ -224,37 +224,8 @@ unsafe fn shuffle_sg(
         }
     }
 
-    // For typesizes that aren't a multiple of four, the remaining bytes can be shuffled like this.
-    // But it's too slow to be worthwhile.
-    // Get remainders using byte loads
-    // TODO: consider doing 16-bit loads, if ts%4 >= 2
-    for k in (ts - ts % SOI32)..ts {
-        let vectorizable_spill_elements = total_elements - total_elements % 16;
-        for l in (0..vectorizable_spill_elements).step_by(16) {
-            let xmm = _mm_set_epi8(
-                *src.add(k + (l + 15) * ts) as i8,
-                *src.add(k + (l + 14) * ts) as i8,
-                *src.add(k + (l + 13) * ts) as i8,
-                *src.add(k + (l + 12) * ts) as i8,
-                *src.add(k + (l + 11) * ts) as i8,
-                *src.add(k + (l + 10) * ts) as i8,
-                *src.add(k + (l + 9) * ts) as i8,
-                *src.add(k + (l + 8) * ts) as i8,
-                *src.add(k + (l + 7) * ts) as i8,
-                *src.add(k + (l + 6) * ts) as i8,
-                *src.add(k + (l + 5) * ts) as i8,
-                *src.add(k + (l + 4) * ts) as i8,
-                *src.add(k + (l + 3) * ts) as i8,
-                *src.add(k + (l + 2) * ts) as i8,
-                *src.add(k + (l + 1) * ts) as i8,
-                *src.add(k + (l + 0) * ts) as i8,
-            );
-            _mm_storeu_si128(dst.add(l + k * total_elements) as *mut __m128i, xmm);
-        }
-        for l in vectorizable_spill_elements..total_elements {
-            *dst.add(l + k * total_elements) = *src.add(k + l * ts);
-        }
-    }
+    // For typesizes that aren't a multiple of four, the remaining bytes can be shuffled by doing
+    // 8-bit loads and SIMD stores. But it's too slow to be worthwhile.
 }
 
 pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
