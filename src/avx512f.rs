@@ -105,8 +105,8 @@ unsafe fn shuffle16(
     dst: *mut u8,
 ) {
     const TS: usize = 16;
-    let mut zmm0: [__m512i; TS] = mem::zeroed();
-    let mut zmm1: [__m512i; TS] = mem::zeroed();
+    let mut zmm0: [__m512i; TS] = mem::uninitialized();
+    let mut zmm1: [__m512i; TS] = mem::uninitialized();
 
     #[rustfmt::skip]
     let shmask = _mm512_set_epi8(
