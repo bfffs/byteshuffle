@@ -105,8 +105,6 @@ unsafe fn shuffle16(
     dst: *mut u8,
 ) {
     const TS: usize = 16;
-    let mut zmm0: [__m512i; TS] = mem::zeroed();
-    let mut zmm1: [__m512i; TS] = mem::zeroed();
 
     #[rustfmt::skip]
     let shmask = _mm512_set_epi8(
@@ -122,14 +120,22 @@ unsafe fn shuffle16(
         );
 
     for j in (0..vectorizable_elements).step_by(SO512I) {
+        let mut zmm0: [mem::MaybeUninit<__m512i>; TS] = unsafe {
+            mem::MaybeUninit::uninit().assume_init()
+        };
         for k in 0..TS {
             let p = src.add(j * TS + k * SO512I) as *const i32;
-            zmm0[k] = _mm512_loadu_si512(p);
+            zmm0[k] = mem::MaybeUninit::new(_mm512_loadu_si512(p));
         }
+        let mut zmm0 = unsafe{ mem::transmute::<_, [__m512i; TS]>(zmm0)};
+        let mut zmm1: [mem::MaybeUninit<__m512i>; TS] = unsafe {
+            mem::MaybeUninit::uninit().assume_init()
+        };
         for k in 0..(TS/2) {
-            zmm1[k * 2] = _mm512_unpacklo_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
-            zmm1[k * 2 + 1] = _mm512_unpackhi_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
+            zmm1[k * 2] = mem::MaybeUninit::new(_mm512_unpacklo_epi8(zmm0[k * 2], zmm0[k * 2 + 1]));
+            zmm1[k * 2 + 1] = mem::MaybeUninit::new(_mm512_unpackhi_epi8(zmm0[k * 2], zmm0[k * 2 + 1]));
         }
+        let mut zmm1 = unsafe{ mem::transmute::<_, [__m512i; TS]>(zmm1)};
 
         let mut l = 0;
         for k in 0..(TS/2) {
