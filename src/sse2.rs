@@ -144,8 +144,6 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     } else if typesize == 16 {
         shuffle16(vectorizable_elements, total_elements, src, dst);
     } else {
-        // TODO: maybe eliminate optimization for typesize=2, since bfffs does
-        // not use it.
         crate::generic::shuffle(typesize, len, src, dst)
     }
 

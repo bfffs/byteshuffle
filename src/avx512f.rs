@@ -162,7 +162,6 @@ unsafe fn shuffle16(
             zmm0[k] = _mm512_shuffle_epi8(zmm1[k], shmask);
         }
 
-        //TODO: shuffle 128 and 256 bit lanes
         for k in 0..TS {
             let p = dst.add(j + k * total_elements) as *mut i32;
             _mm512_storeu_si512(p, zmm0[k]);
