@@ -6,7 +6,6 @@ use core::arch::x86_64 as simd;
 use std::mem;
 
 use simd::{
-    __m128i,
     __m512i,
     _mm256_set_epi32,
     _mm512_i32gather_epi32,
@@ -17,8 +16,6 @@ use simd::{
     _mm512_set_epi64,
     _mm512_set_epi8,
     _mm512_shuffle_epi8,
-    _mm_set_epi8,
-    _mm_storeu_si128,
     _mm512_storeu_si512,
     _mm512_unpackhi_epi64,
     _mm512_unpackhi_epi32,
