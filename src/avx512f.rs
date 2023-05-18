@@ -6,10 +6,14 @@ use core::arch::x86_64 as simd;
 use std::mem;
 
 use simd::{
+    __m256i,
     __m512i,
+    _mm256_set_epi8,
+    _mm256_shuffle_epi8,
+    _mm256_permutexvar_epi32,
+    _mm256_i32gather_epi32,
+    _mm256_i32scatter_epi64,
     _mm256_set_epi32,
-    _mm512_i32gather_epi32,
-    _mm512_i32scatter_epi64,
     _mm512_loadu_si512,
     _mm512_permutex2var_epi64,
     _mm512_set_epi32,
@@ -25,27 +29,27 @@ use simd::{
     _mm512_unpacklo_epi32,
     _mm512_unpacklo_epi16,
     _mm512_unpacklo_epi8,
+    _mm_set_epi32,
 _mm512_permutexvar_epi32
 };
 
 const SOI32: usize = mem::size_of::<i32>();
+const SO256I: usize = mem::size_of::<__m256i>();
 const SO512I: usize = mem::size_of::<__m512i>();
 
 /// Helper that shuffles 8 32-bit ints
 #[target_feature(enable = "avx512f")]
-#[target_feature(enable = "avx512bw")]
-unsafe fn shuffle_8x4(zmm: __m512i) -> __m512i {
-    // Sadly, there's no const constructor for __m512i
+#[target_feature(enable = "avx512vl")]
+unsafe fn shuffle_8x4(ymm: __m256i) -> __m256i {
+    // Sadly, there's no const constructor for __m256i
     #[rustfmt::skip]
-    let shuf8 = _mm512_set_epi8(
-        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
-        15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
+    let shuf8 = _mm256_set_epi8(
         15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
         15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
     );
-    let shuf32 = _mm512_set_epi32(15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0);
-    let zmm1 = _mm512_shuffle_epi8(zmm, shuf8);
-    _mm512_permutexvar_epi32(shuf32, zmm1)
+    let shuf32 = _mm256_set_epi32(7, 3, 6, 2, 5, 1, 4, 0);
+    let ymm1 = _mm256_shuffle_epi8(ymm, shuf8);
+    _mm256_permutexvar_epi32(shuf32, ymm1)
 }
 
 /// AVX-512F optimized shuffle for 2-byte type sizes,
@@ -167,9 +171,11 @@ unsafe fn shuffle16(
 }
 
 /// AVX512F optimized shuffle for type sizes of at least 16 bytes
+// Even though it doesn't use 512-bit registers, this requires AVX-512F + AVX512VL due to the
+// _mm256_i32scatter_epi32 function.
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
-#[target_feature(enable = "avx512bw")]
+#[target_feature(enable = "avx512vl")]
 unsafe fn shuffle_sg(
     vectorizable_elements: usize,
     total_elements: usize,
@@ -177,17 +183,11 @@ unsafe fn shuffle_sg(
     src: *const u8,
     dst: *mut u8,
 ) {
+    const I32PM256: usize = SO256I / SOI32;
+
     debug_assert_eq!(vectorizable_elements % 4, 0);
 
-    let loadindex = _mm512_set_epi32(
-        15 * ts as i32,
-        14 * ts as i32,
-        13 * ts as i32,
-        12 * ts as i32,
-        11 * ts as i32,
-        10 * ts as i32,
-        9 * ts as i32,
-        8 * ts as i32,
+    let loadindex = _mm256_set_epi32(
         7 * ts as i32,
         6 * ts as i32,
         5 * ts as i32,
@@ -197,26 +197,22 @@ unsafe fn shuffle_sg(
         ts as i32,
         0,
     );
-    let storeindex = _mm256_set_epi32(
-        (3 * total_elements + SOI32 * 2) as i32,
-        (3 * total_elements) as i32,
-        (2 * total_elements + SOI32 * 2) as i32,
-        (2 * total_elements) as i32,
-        (total_elements + SOI32 * 2) as i32,
+    let storeindex = _mm_set_epi32(
+        3 * total_elements as i32,
+        2 * total_elements as i32,
         total_elements as i32,
-        (SOI32 * 2) as i32,
         0,
     );
 
-    for i in 0..(vectorizable_elements / 16) {
+    for i in 0..(vectorizable_elements / I32PM256) {
         for j in 0..(ts / SOI32) {
-            let p = src.add(i * 16 * ts + j * 16 / SOI32) as *const u8;
-            let mut zmm = _mm512_i32gather_epi32(loadindex, p, 1);
+            let p = src.add(i * I32PM256 * ts + j * SOI32) as *const i32;
+            let mut zmm = _mm256_i32gather_epi32(p, loadindex, 1);
             // zmm should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51, 64, 65, 66, 67...]
             zmm = shuffle_8x4(zmm);
             // zmm should look like [0, 16, 32, 48, 64, 80, ... 1, 17, 33, ...]
-            let p = dst.add(i * 16 + j * total_elements * 4);
-            _mm512_i32scatter_epi64(p, storeindex, zmm, 1);
+            let p = dst.add(i * I32PM256 + j * total_elements * SOI32);
+            _mm256_i32scatter_epi64(p, storeindex, zmm, 1);
         }
     }
 
@@ -229,7 +225,7 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     let vectorized_chunk_size = typesize * SO512I;
     let vectorizable_bytes = len - (len % vectorized_chunk_size);
     let vectorizable_elements = vectorizable_bytes / typesize;
-    let sg_chunk_size = typesize * SO512I / 4;
+    let sg_chunk_size = typesize * SO256I / 4;
     let sg_bytes = len - (len % sg_chunk_size);
     let sg_elements = sg_bytes / typesize;
 
@@ -258,8 +254,8 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
 mod t {
     macro_rules! require_avx512f {
         () => {
-            if !is_x86_feature_detected!("avx512f") || !is_x86_feature_detected!("avx512bw") {
-                eprintln!("Skipping: AVX512F unavailable.");
+            if !is_x86_feature_detected!("avx512f") || !is_x86_feature_detected!("avx512vl") {
+                eprintln!("Skipping: AVX512F or AVX512VL unavailable.");
                 return;
             }
         };
@@ -272,7 +268,7 @@ mod t {
         use core::arch::x86_64 as simd;
 
         use rstest::rstest;
-        use simd::{_mm512_loadu_si512, _mm512_storeu_si512};
+        use simd::{__m256i, _mm256_loadu_si256, _mm256_storeu_si256};
 
         use super::super::shuffle_8x4;
 
@@ -283,16 +279,14 @@ mod t {
             #[rustfmt::skip]
             let input = vec![
                 0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51,
-                64, 65, 66, 67, 80, 81, 82, 83, 96, 97, 98, 99, 112, 113, 114, 115,
-                128, 129, 130, 131, 144, 145, 146, 147, 160, 161, 162, 163, 176, 177, 178, 179,
-                192, 193, 194, 195, 208, 209, 210, 211, 224, 225, 226, 227, 240, 241, 242, 243];
-            let mut want = vec![0; 64];
-            let mut actual = vec![0; 64];
+                64, 65, 66, 67, 80, 81, 82, 83, 96, 97, 98, 99, 112, 113, 114, 115];
+            let mut want = vec![0; 32];
+            let mut actual = vec![0; 32];
             unsafe {
-                let x = _mm512_loadu_si512(input.as_ptr() as *const i32);
+                let x = _mm256_loadu_si256(input.as_ptr() as *const __m256i);
                 let y = shuffle_8x4(x);
                 crate::generic::shuffle(4, input.len(), input.as_ptr(), want.as_mut_ptr());
-                _mm512_storeu_si512(actual.as_mut_ptr() as *mut i32, y);
+                _mm256_storeu_si256(actual.as_mut_ptr() as *mut __m256i, y);
             }
             assert_eq!(want, actual);
         }
@@ -369,10 +363,10 @@ mod t {
         }
 
         #[rstest]
-        fn compare20x320() {
+        fn compare20x160() {
             require_avx512f!();
             let typesize = 20;
-            let len = 320;
+            let len = 160;
             let src = (0..len).map(|i| (i % 256) as u8).collect::<Vec<u8>>();
             let mut generic_dst = vec![0u8; len];
             let mut sse2_dst = vec![0u8; len];
