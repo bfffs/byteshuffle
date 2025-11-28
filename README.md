@@ -25,7 +25,7 @@ architectures are welcome.
 
 # Minimum Supported Rust Version (MSRV)
 
-Byteshuffle is supported on Rust 1.87.0 and higher.  Byteshuffle's MSRV will
+Byteshuffle is supported on Rust 1.89.0 and higher.  Byteshuffle's MSRV will
 not be changed in the future without bumping the major or minor version.
 
 # License

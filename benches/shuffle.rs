@@ -1,7 +1,7 @@
 use std::{env, str::FromStr, time::Duration};
 
+use byteshuffle::{shuffle_bytes, SimdImpl};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use shuffle::{shuffle_bytes, SimdImpl};
 
 struct Spec {
     name:     &'static str,
@@ -22,7 +22,7 @@ fn select_impl() {
     let shuffle_impl = env::var("SHUFFLE_IMPL").map(|s| SimdImpl::from_str(s.as_str()));
     if let Ok(Ok(impl_)) = shuffle_impl {
         // Safe because we're single-threaded before main
-        unsafe { shuffle::select_implementation(impl_) }
+        unsafe { byteshuffle::select_implementation(impl_) }
     }
 }
 

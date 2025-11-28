@@ -16,7 +16,7 @@
 //! Typical use: a byte array consists of an arithmetic sequence.  Shuffle it, compress it,
 //! decompress it, and then unshuffle it.
 //! ```
-//! # use shuffle::*;
+//! # use byteshuffle::*;
 //! const IN: [u8; 8] = [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
 //! let mut shuffled = [0u8; 8];
 //! shuffle_bytes(2, &IN, &mut shuffled);
@@ -124,7 +124,7 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
 ///
 /// # Examples
 /// ```
-/// # use shuffle::*;
+/// # use byteshuffle::*;
 /// const IN: [u16; 4] = [0x01, 0x02, 0x03, 0x04];
 /// let mut out = [0u8; 8];
 /// shuffle(&IN, &mut out);
@@ -157,7 +157,7 @@ pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
 ///
 /// # Examples
 /// ```
-/// # use shuffle::*;
+/// # use byteshuffle::*;
 /// const IN: [u8; 8] = [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
 /// let mut out = [0u8; 8];
 /// shuffle_bytes(2, &IN, &mut out);
@@ -182,7 +182,7 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
 ///
 /// # Examples
 /// ```
-/// # use shuffle::*;
+/// # use byteshuffle::*;
 /// const IN: [u16; 4] = [0x01, 0x02, 0x03, 0x04];
 /// let mut shuffled = [0u8; 8];
 /// shuffle(&IN, &mut shuffled);
@@ -210,7 +210,7 @@ pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
 ///
 /// # Examples
 /// ```
-/// # use shuffle::*;
+/// # use byteshuffle::*;
 /// const IN: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04];
 /// let mut out = [0u8; 8];
 /// unshuffle_bytes(2, &IN, &mut out);

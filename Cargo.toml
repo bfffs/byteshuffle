@@ -9,20 +9,19 @@ repository = "https://github.com/asomers/byteshuffle-rs"
 categories = ["compression"]
 keywords = ["simd"]
 documentation = "https://docs.rs/byteshuffle"
-rust-version = "1.87.0"
+rust-version = "1.89.0"
 description = """
 SIMD-accelerated byte shuffle/unshuffle functions
 """
 
-
 [dependencies]
 cfg-if = "1.0"
-ctor = "0.2.0"
+ctor = { version = "0.6.0", default-features = false, features = ["proc_macro"] }
 
 [dev-dependencies]
 criterion = "0.7"
 rand = "0.9.0"
-rstest = "0.17.0"
+rstest = "0.18.0"
 
 [[bench]]
 name = "shuffle"
