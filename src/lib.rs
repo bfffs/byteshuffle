@@ -1,6 +1,3 @@
-#![feature(avx512_target_feature)]
-#![feature(stdsimd)]
-
 use std::{mem, str::FromStr};
 
 use cfg_if::cfg_if;

@@ -78,7 +78,7 @@ unsafe fn shuffle2(
     for j in (0..vectorizable_elements).step_by(SO512I) {
         // Fetch 64 elements (128 bytes) then shuffle things into place.
         for k in 0..2 {
-            let p = src.add(j * TS + k * SO512I) as *const i32;
+            let p = src.add(j * TS + k * SO512I) as *const __m512i;
             zmm0[k] = _mm512_loadu_si512(p);
             // Shuffle within 128-bit lanes
             zmm0[k] = _mm512_shuffle_epi8(zmm0[k], shuf8);
@@ -89,7 +89,7 @@ unsafe fn shuffle2(
 
         // Store the result vectors
         for k in 0..2 {
-            let p = dst.add(j + k * total_elements) as *mut i32;
+            let p = dst.add(j + k * total_elements) as *mut __m512i;
             _mm512_storeu_si512(p, zmm1[k]);
         }
     }
@@ -124,7 +124,7 @@ unsafe fn shuffle16(
 
     for j in (0..vectorizable_elements).step_by(SO512I) {
         for k in 0..TS {
-            let p = src.add(j * TS + k * SO512I) as *const i32;
+            let p = src.add(j * TS + k * SO512I) as *const __m512i;
             zmm0[k] = _mm512_loadu_si512(p);
         }
         for k in 0..(TS/2) {
@@ -164,7 +164,7 @@ unsafe fn shuffle16(
         }
 
         for k in 0..TS {
-            let p = dst.add(j + k * total_elements) as *mut i32;
+            let p = dst.add(j + k * total_elements) as *mut __m512i;
             _mm512_storeu_si512(p, zmm0[k]);
         }
     }
@@ -211,7 +211,7 @@ unsafe fn shuffle_sg(
             // zmm should look like [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 51, 64, 65, 66, 67...]
             zmm = shuffle_8x4(zmm);
             // zmm should look like [0, 16, 32, 48, 64, 80, ... 1, 17, 33, ...]
-            let p = dst.add(i * I32PM256 + j * total_elements * SOI32);
+            let p = dst.add(i * I32PM256 + j * total_elements * SOI32) as *mut i64;
             _mm256_i32scatter_epi64(p, storeindex, zmm, 1);
         }
     }
