@@ -8,29 +8,29 @@ use std::mem;
 use simd::{
     __m256i,
     __m512i,
-    _mm256_set_epi8,
-    _mm256_shuffle_epi8,
-    _mm256_permutexvar_epi32,
     _mm256_i32gather_epi32,
     _mm256_i32scatter_epi64,
+    _mm256_permutexvar_epi32,
     _mm256_set_epi32,
+    _mm256_set_epi8,
+    _mm256_shuffle_epi8,
     _mm512_loadu_si512,
     _mm512_permutex2var_epi64,
+    _mm512_permutexvar_epi32,
     _mm512_set_epi32,
     _mm512_set_epi64,
     _mm512_set_epi8,
     _mm512_shuffle_epi8,
     _mm512_storeu_si512,
-    _mm512_unpackhi_epi64,
-    _mm512_unpackhi_epi32,
     _mm512_unpackhi_epi16,
+    _mm512_unpackhi_epi32,
+    _mm512_unpackhi_epi64,
     _mm512_unpackhi_epi8,
-    _mm512_unpacklo_epi64,
-    _mm512_unpacklo_epi32,
     _mm512_unpacklo_epi16,
+    _mm512_unpacklo_epi32,
+    _mm512_unpacklo_epi64,
     _mm512_unpacklo_epi8,
     _mm_set_epi32,
-_mm512_permutexvar_epi32
 };
 
 const SOI32: usize = mem::size_of::<i32>();
@@ -115,25 +115,20 @@ unsafe fn shuffle16(
         15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
         15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0,
         15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0);
-    let shuf32 = _mm512_set_epi32(
-        15, 11, 7, 3,
-        14, 10, 6, 2,
-        13, 9, 5, 1,
-        12, 8, 4, 0,
-        );
+    let shuf32 = _mm512_set_epi32(15, 11, 7, 3, 14, 10, 6, 2, 13, 9, 5, 1, 12, 8, 4, 0);
 
     for j in (0..vectorizable_elements).step_by(SO512I) {
         for k in 0..TS {
             let p = src.add(j * TS + k * SO512I) as *const __m512i;
             zmm0[k] = _mm512_loadu_si512(p);
         }
-        for k in 0..(TS/2) {
+        for k in 0..(TS / 2) {
             zmm1[k * 2] = _mm512_unpacklo_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
             zmm1[k * 2 + 1] = _mm512_unpackhi_epi8(zmm0[k * 2], zmm0[k * 2 + 1]);
         }
 
         let mut l = 0;
-        for k in 0..(TS/2) {
+        for k in 0..(TS / 2) {
             zmm0[k * 2] = _mm512_unpacklo_epi16(zmm1[l], zmm1[l + 2]);
             zmm0[k * 2 + 1] = _mm512_unpackhi_epi16(zmm1[l], zmm1[l + 2]);
             l += 1;
@@ -143,7 +138,7 @@ unsafe fn shuffle16(
         }
 
         l = 0;
-        for k in 0..(TS/2) {
+        for k in 0..(TS / 2) {
             zmm1[k * 2] = _mm512_unpacklo_epi32(zmm0[l], zmm0[l + 4]);
             zmm1[k * 2 + 1] = _mm512_unpackhi_epi32(zmm0[l], zmm0[l + 4]);
             l += 1;

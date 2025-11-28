@@ -128,8 +128,14 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
 /// const IN: [u16; 4] = [0x01, 0x02, 0x03, 0x04];
 /// let mut out = [0u8; 8];
 /// shuffle(&IN, &mut out);
-#[cfg_attr(target_endian = "little", doc = "assert_eq!(out, [0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);")]
-#[cfg_attr(target_endian = "big", doc = "assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);")]
+#[cfg_attr(
+    target_endian = "little",
+    doc = "assert_eq!(out, [0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);"
+)]
+#[cfg_attr(
+    target_endian = "big",
+    doc = "assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);"
+)]
 /// ```
 pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
     let ts = mem::size_of::<T>();
@@ -161,12 +167,7 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     // Safe because of the first assertion.
     unsafe {
-        SHUFFLE(
-            typesize,
-            src.len(),
-            src.as_ptr(),
-            dst.as_ptr() as *mut u8,
-        );
+        SHUFFLE(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
     }
 }
 
@@ -218,12 +219,7 @@ pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
 pub fn unshuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     unsafe {
-        generic::unshuffle(
-            typesize,
-            src.len(),
-            src.as_ptr(),
-            dst.as_ptr() as *mut u8,
-        );
+        generic::unshuffle(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
     }
 }
 
@@ -320,7 +316,7 @@ mod t {
                 }
             }
             let mut dst = [0u16; 2];
-            unsafe{ unshuffle(&src[..], &mut dst[..]) };
+            unsafe { unshuffle(&src[..], &mut dst[..]) };
             assert_eq!(dst, &[0x1234u16, 0x5678u16][..]);
         }
 
@@ -337,7 +333,7 @@ mod t {
                 }
             }
             let mut dst = [0u32; 4];
-            unsafe{ unshuffle(&src[..], &mut dst[..]) };
+            unsafe { unshuffle(&src[..], &mut dst[..]) };
             assert_eq!(
                 dst,
                 &[0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00][..]
