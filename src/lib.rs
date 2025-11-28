@@ -288,9 +288,9 @@ mod t {
                 return;
             }
 
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
 
-            let src = (0..len).map(|_| rng.gen()).collect::<Vec<u8>>();
+            let src = (0..len).map(|_| rng.random()).collect::<Vec<u8>>();
             let mut generic_dst = vec![0u8; len];
             let mut opt_dst = vec![0u8; len];
             unsafe {

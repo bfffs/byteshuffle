@@ -182,9 +182,9 @@ mod t {
         #[case(16, 4096)]
         fn compare(#[case] typesize: usize, #[case] len: usize) {
             require_sse2!();
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
 
-            let src = (0..len).map(|_| rng.gen()).collect::<Vec<u8>>();
+            let src = (0..len).map(|_| rng.random()).collect::<Vec<u8>>();
             let mut generic_dst = vec![0u8; len];
             let mut sse2_dst = vec![0u8; len];
             unsafe {
