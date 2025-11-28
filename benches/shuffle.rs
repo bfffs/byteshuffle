@@ -19,12 +19,10 @@ impl Spec {
 }
 
 fn select_impl() {
-    match env::var("SHUFFLE_IMPL").map(|s| SimdImpl::from_str(s.as_str())) {
-        Ok(Ok(impl_)) => {
-            // Safe because we're single-threaded before main
-            unsafe { shuffle::select_implementation(impl_) }
-        }
-        _ => (),
+    let shuffle_impl = env::var("SHUFFLE_IMPL").map(|s| SimdImpl::from_str(s.as_str())); 
+    if let Ok(Ok(impl_)) = shuffle_impl {
+        // Safe because we're single-threaded before main
+        unsafe { shuffle::select_implementation(impl_) }
     }
 }
 

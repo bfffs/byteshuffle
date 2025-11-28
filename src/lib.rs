@@ -98,8 +98,7 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
                         unsafe { SHUFFLE = avx512f::shuffle; }
                     } else if is_x86_feature_detected!("avx2") {
                         unsafe { SHUFFLE = avx2::shuffle; }
-                    } else
-                        if is_x86_feature_detected!("sse2") {
+                    } else if is_x86_feature_detected!("sse2") {
                         unsafe { SHUFFLE = sse2::shuffle; }
                     } else {
                         unsafe { SHUFFLE = generic::shuffle; }
@@ -134,13 +133,13 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
 /// ```
 pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
     let ts = mem::size_of::<T>();
-    assert_eq!(src.len() * ts, dst.len());
+    assert_eq!(mem::size_of_val(src), dst.len());
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
         SHUFFLE(
             ts,
-            src.len() * ts,
+            mem::size_of_val(src),
             src.as_ptr() as *const u8,
             dst.as_ptr() as *mut u8,
         );
@@ -165,7 +164,7 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
         SHUFFLE(
             typesize,
             src.len(),
-            src.as_ptr() as *const u8,
+            src.as_ptr(),
             dst.as_ptr() as *mut u8,
         );
     }
@@ -192,14 +191,14 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
 /// ```
 pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
     let ts = mem::size_of::<T>();
-    assert_eq!(src.len(), dst.len() * ts);
+    assert_eq!(src.len(), mem::size_of_val(dst));
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
         generic::unshuffle(
             ts,
-            dst.len() * ts,
-            src.as_ptr() as *const u8,
+            mem::size_of_val(dst),
+            src.as_ptr(),
             dst.as_ptr() as *mut u8,
         );
     }
@@ -222,7 +221,7 @@ pub fn unshuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
         generic::unshuffle(
             typesize,
             src.len(),
-            src.as_ptr() as *const u8,
+            src.as_ptr(),
             dst.as_ptr() as *mut u8,
         );
     }

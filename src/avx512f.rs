@@ -235,7 +235,7 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     } else if typesize == 16 && len >= vectorized_chunk_size {
         shuffle16(vectorizable_elements, total_elements, src, dst);
         vectorizable_bytes
-    } else if typesize % 4 == 0 && len >= sg_chunk_size {
+    } else if typesize.is_multiple_of(4) && len >= sg_chunk_size {
         shuffle_sg(sg_elements, total_elements, typesize, src, dst);
         sg_bytes
     } else {

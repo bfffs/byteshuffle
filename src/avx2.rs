@@ -406,10 +406,9 @@ mod t {
             let src = (0..len).map(|i| (i % 256) as u8).collect::<Vec<u8>>();
             let mut generic_dst = vec![0u8; len];
             let mut sse2_dst = vec![0u8; len];
-            let srcp = src.as_ptr() as *const u8;
+            let srcp = src.as_ptr();
             unsafe {
                 crate::generic::shuffle(typesize, len, srcp, generic_dst.as_mut_ptr());
-                // crate::avx2::shuffle(typesize, 256, src.as_ptr(), sse2_dst.as_mut_ptr());
                 crate::avx2::shuffle(typesize, len, srcp, sse2_dst.as_mut_ptr());
             }
             assert_eq!(generic_dst, sse2_dst);
