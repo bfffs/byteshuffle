@@ -1,7 +1,19 @@
 [package]
-name = "shuffle"
+name = "byteshuffle"
 version = "0.1.0"
 edition = "2021"
+authors = ["Alan Somers <asomers@gmail.com>"]
+license = "BSD-3-Clause"
+readme = "README.md"
+repository = "https://github.com/asomers/byteshuffle-rs"
+categories = ["compression"]
+keywords = ["simd"]
+documentation = "https://docs.rs/byteshuffle"
+rust-version = "1.87.0"
+description = """
+SIMD-accelerated byte shuffle/unshuffle functions
+"""
+
 
 [dependencies]
 cfg-if = "1.0"
