@@ -303,6 +303,9 @@ mod t {
 
     /// Test the type-based shuffle API
     mod unshuffle {
+        use rand::Rng;
+        use rstest::rstest;
+
         use super::*;
 
         // Two elements of two bytes each
@@ -338,6 +341,24 @@ mod t {
                 dst,
                 &[0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00][..]
             );
+        }
+
+        /// unshuffle_bytes should be the inverse of shuffle_bytes
+        #[rstest]
+        fn inverse(
+            #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
+            #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
+        ) {
+            let mut rng = rand::rng();
+
+            let src = (0..len).map(|_| rng.random()).collect::<Vec<u8>>();
+            let mut shuffled = vec![0u8; len];
+            let mut dst = vec![0u8; len];
+            unsafe {
+                crate::generic::shuffle(typesize, len, src.as_ptr(), shuffled.as_mut_ptr());
+                crate::generic::unshuffle(typesize, len, shuffled.as_ptr(), dst.as_mut_ptr());
+            }
+            assert_eq!(src, dst);
         }
     }
 }
