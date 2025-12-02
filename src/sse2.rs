@@ -22,6 +22,8 @@ use simd::{
     _mm_unpacklo_epi8,
 };
 
+const SO128I: usize = mem::size_of::<__m128i>();
+
 /// SSE2 optimized shuffle for 2-byte type sizes
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn shuffle2(
@@ -31,7 +33,6 @@ unsafe fn shuffle2(
     dst: *mut u8,
 ) {
     const TS: usize = 2;
-    const SO128I: usize = mem::size_of::<__m128i>();
     let mut xmm0: [__m128i; 2] = mem::zeroed();
     let mut xmm1: [__m128i; 2] = mem::zeroed();
 
@@ -72,7 +73,6 @@ unsafe fn shuffle16(
     dst: *mut u8,
 ) {
     const TS: usize = 16;
-    const SO128I: usize = mem::size_of::<__m128i>();
     let mut xmm0: [__m128i; 16] = mem::zeroed();
     let mut xmm1: [__m128i; 16] = mem::zeroed();
 
@@ -164,7 +164,6 @@ unsafe fn unshuffle2(
     dst: *mut u8,
 ) {
     const TS: usize = 2;
-    const SO128I: usize = mem::size_of::<__m128i>();
     let mut xmm0: [__m128i; 2] = mem::zeroed();
     let mut xmm1: [__m128i; 2] = mem::zeroed();
 
@@ -189,14 +188,73 @@ unsafe fn unshuffle2(
     }
 }
 
-/// SSE2 optimized shuffle for 16-byte type sizes
+/// SSE2 optimized unshuffle for 16-byte type sizes
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn unshuffle16(
     vectorizable_elements: usize,
     total_elements: usize,
     src: *const u8,
     dst: *mut u8,
 ) {
-    todo!()
+    const TS: usize = 16;
+    let mut xmm1: [__m128i; 16] = mem::zeroed();
+    let mut xmm2: [__m128i; 16] = mem::zeroed();
+
+    for i in (0..vectorizable_elements).step_by(SO128I) {
+        // Load 16 elements (256 bytes) into 16 XMM registers.
+        for j in 0..16 {
+            let p = src.add(i + j * total_elements) as *const __m128i;
+            xmm1[j] = _mm_loadu_si128(p);
+        }
+        // Shuffle bytes
+        for j in 0..8 {
+            // Compute the low 32 bytes
+            xmm2[j] = _mm_unpacklo_epi8(xmm1[j * 2], xmm1[j * 2 + 1]);
+            // Compute the hi 32 bytes
+            xmm2[8 + j] = _mm_unpackhi_epi8(xmm1[j * 2], xmm1[j * 2 + 1]);
+        }
+        // Shuffle 2-byte words
+        for j in 0..8 {
+            // Compute the low 32 bytes
+            xmm1[j] = _mm_unpacklo_epi16(xmm2[j * 2], xmm2[j * 2 + 1]);
+            // Compute the hi 32 bytes
+            xmm1[8 + j] = _mm_unpackhi_epi16(xmm2[j * 2], xmm2[j * 2 + 1]);
+        }
+        // Shuffle 4-byte dwords
+        for j in 0..8 {
+            // Compute the low 32 bytes
+            xmm2[j] = _mm_unpacklo_epi32(xmm1[j * 2], xmm1[j * 2 + 1]);
+            // Compute the hi 32 bytes
+            xmm2[8 + j] = _mm_unpackhi_epi32(xmm1[j * 2], xmm1[j * 2 + 1]);
+        }
+        // Shuffle 8-byte qwords
+        for j in 0..8 {
+            // Compute the low 32 bytes
+            xmm1[j] = _mm_unpacklo_epi64(xmm2[j * 2], xmm2[j * 2 + 1]);
+            // Compute the hi 32 bytes
+            xmm1[8 + j] = _mm_unpackhi_epi64(xmm2[j * 2], xmm2[j * 2 + 1]);
+        }
+
+        // Store the result vectors in proper order
+        #[allow(clippy::erasing_op)]
+        _mm_storeu_si128(dst.add(i * TS + 0 * SO128I) as *mut __m128i, xmm1[0]);
+        #[allow(clippy::identity_op)]
+        _mm_storeu_si128(dst.add(i * TS + 1 * SO128I) as *mut __m128i, xmm1[8]);
+        _mm_storeu_si128(dst.add(i * TS + 2 * SO128I) as *mut __m128i, xmm1[4]);
+        _mm_storeu_si128(dst.add(i * TS + 3 * SO128I) as *mut __m128i, xmm1[12]);
+        _mm_storeu_si128(dst.add(i * TS + 4 * SO128I) as *mut __m128i, xmm1[2]);
+        _mm_storeu_si128(dst.add(i * TS + 5 * SO128I) as *mut __m128i, xmm1[10]);
+        _mm_storeu_si128(dst.add(i * TS + 6 * SO128I) as *mut __m128i, xmm1[6]);
+        _mm_storeu_si128(dst.add(i * TS + 7 * SO128I) as *mut __m128i, xmm1[14]);
+        _mm_storeu_si128(dst.add(i * TS + 8 * SO128I) as *mut __m128i, xmm1[1]);
+        _mm_storeu_si128(dst.add(i * TS + 9 * SO128I) as *mut __m128i, xmm1[9]);
+        _mm_storeu_si128(dst.add(i * TS + 10 * SO128I) as *mut __m128i, xmm1[5]);
+        _mm_storeu_si128(dst.add(i * TS + 11 * SO128I) as *mut __m128i, xmm1[13]);
+        _mm_storeu_si128(dst.add(i * TS + 12 * SO128I) as *mut __m128i, xmm1[3]);
+        _mm_storeu_si128(dst.add(i * TS + 13 * SO128I) as *mut __m128i, xmm1[11]);
+        _mm_storeu_si128(dst.add(i * TS + 14 * SO128I) as *mut __m128i, xmm1[7]);
+        _mm_storeu_si128(dst.add(i * TS + 15 * SO128I) as *mut __m128i, xmm1[15]);
+    }
 }
 
 pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
