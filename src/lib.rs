@@ -37,7 +37,8 @@ mod avx512f;
 mod generic;
 mod sse2;
 
-static mut SHUFFLE: unsafe fn(usize, usize, *const u8, *mut u8) = generic::shuffle;
+type LlFunc = unsafe fn(usize, usize, *const u8, *mut u8);
+static mut IMPL: (LlFunc, LlFunc) = (generic::shuffle, generic::unshuffle);
 
 /// Explicitly specify an instruction set to use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -95,22 +96,22 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
             match impl_ {
                 SimdImpl::Auto => {
                     if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw"){
-                        unsafe { SHUFFLE = avx512f::shuffle; }
+                        unsafe { IMPL = (avx512f::shuffle, sse2::unshuffle); }
                     } else if is_x86_feature_detected!("avx2") {
-                        unsafe { SHUFFLE = avx2::shuffle; }
+                        unsafe { IMPL = (avx2::shuffle, sse2::unshuffle); }
                     } else if is_x86_feature_detected!("sse2") {
-                        unsafe { SHUFFLE = sse2::shuffle; }
+                        unsafe { IMPL = (sse2::shuffle, sse2::unshuffle); }
                     } else {
-                        unsafe { SHUFFLE = generic::shuffle; }
+                        unsafe { IMPL = (generic::shuffle, generic::unshuffle); }
                     }
                 },
-                SimdImpl::Generic => unsafe { SHUFFLE = generic::shuffle; },
-                SimdImpl::Sse2 => unsafe { SHUFFLE = sse2::shuffle; },
-                SimdImpl::Avx2 => unsafe { SHUFFLE = avx2::shuffle; },
-                SimdImpl::Avx512F => unsafe { SHUFFLE = avx512f::shuffle; },
+                SimdImpl::Generic => unsafe { IMPL = (generic::shuffle, generic::unshuffle); },
+                SimdImpl::Sse2 => unsafe { IMPL = (sse2::shuffle, sse2::unshuffle); },
+                SimdImpl::Avx2 => unsafe { IMPL = (avx2::shuffle, sse2::unshuffle); },
+                SimdImpl::Avx512F => unsafe { IMPL = (avx512f::shuffle, sse2::unshuffle); },
             }
         } else {
-            unsafe { SHUFFLE = generic::shuffle; }
+            unsafe { IMPL = (generic::shuffle, generic::unshuffle); }
         }
     }
 }
@@ -137,13 +138,14 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
     doc = "assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);"
 )]
 /// ```
+// TODO: rename to "shuffle_objects", and allocate the output.
 pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
     let ts = mem::size_of::<T>();
     assert_eq!(mem::size_of_val(src), dst.len());
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        SHUFFLE(
+        IMPL.0(
             ts,
             mem::size_of_val(src),
             src.as_ptr() as *const u8,
@@ -163,11 +165,14 @@ pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
 /// shuffle_bytes(2, &IN, &mut out);
 /// assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);
 /// ```
+// TODO: change typesize to u8.  Nothing larger will work, anyway.
+// TODO: rename to "shuffle" and allocate space for the output, for better symmetry with compressor
+// libraries' APIs, and to better match the needs of bfffs.
 pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     // Safe because of the first assertion.
     unsafe {
-        SHUFFLE(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
+        IMPL.0(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
     }
 }
 
@@ -196,7 +201,7 @@ pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
     assert!(ts > 1, "No point shuffling plain [u8]");
     // Safe because of the first assertion.
     unsafe {
-        generic::unshuffle(
+        IMPL.1(
             ts,
             mem::size_of_val(dst),
             src.as_ptr(),
@@ -219,7 +224,7 @@ pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
 pub fn unshuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
     assert_eq!(src.len(), dst.len());
     unsafe {
-        generic::unshuffle(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
+        IMPL.1(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
     }
 }
 
@@ -303,9 +308,6 @@ mod t {
 
     /// Test the type-based shuffle API
     mod unshuffle {
-        use rand::Rng;
-        use rstest::rstest;
-
         use super::*;
 
         // Two elements of two bytes each
@@ -342,6 +344,11 @@ mod t {
                 &[0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00][..]
             );
         }
+    }
+
+    mod unshuffle_bytes {
+        use rand::Rng;
+        use rstest::rstest;
 
         /// unshuffle_bytes should be the inverse of shuffle_bytes
         #[rstest]

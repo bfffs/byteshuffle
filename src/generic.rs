@@ -36,10 +36,23 @@ pub unsafe fn shuffle_partial(
 /// # Safety
 /// src and dst must both be of exactly len bytes long.
 pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
+    unshuffle_partial(typesize, 0, len, src, dst)
+}
+
+/// Unshuffle the tail end of a mostly-unshuffled block of data.  Begin `start` into
+/// the buffer.
+pub unsafe fn unshuffle_partial(
+    typesize: usize,
+    start: usize,
+    len: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    let vectorizable_elements = start / typesize;
     let quot = len / typesize;
     let rem = len % typesize;
 
-    for i in 0..quot {
+    for i in vectorizable_elements..quot {
         for j in 0..typesize {
             *dst.add(i * typesize + j) = *src.add(j * quot + i)
         }

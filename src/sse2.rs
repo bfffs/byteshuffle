@@ -155,6 +155,84 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     }
 }
 
+/// SSE2 optimized unshuffle for 2-byte type sizes
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
+unsafe fn unshuffle2(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    const TS: usize = 2;
+    const SO128I: usize = mem::size_of::<__m128i>();
+    let mut xmm0: [__m128i; 2] = mem::zeroed();
+    let mut xmm1: [__m128i; 2] = mem::zeroed();
+
+    for i in (0..vectorizable_elements).step_by(SO128I) {
+        // Load 16 elements (32 bytes) into 2 XMM registers.
+        for j in 0..2 {
+            let p = src.add(i + j * total_elements) as *const __m128i;
+            xmm0[j] = _mm_loadu_si128(p);
+        }
+        // Shuffle bytes
+        // Compute the low 32 bytes
+        xmm1[0] = _mm_unpacklo_epi8(xmm0[0], xmm0[1]);
+        // Compute the hi 32 bytes
+        xmm1[1] = _mm_unpackhi_epi8(xmm0[0], xmm0[1]);
+        // Store the result vectors in proper order
+        //_mm_storeu_si128(dst.add(i * TS + 0 * SO128I) as *mut __m128i, xmm1[0]);
+        //_mm_storeu_si128(dst.add(i * TS + 1 * SO128I) as *mut __m128i, xmm1[1]);
+        for k in 0..2 {
+            let p = dst.add(i * TS + k * SO128I) as *mut __m128i;
+            _mm_storeu_si128(p, xmm1[k]);
+        }
+    }
+}
+
+/// SSE2 optimized shuffle for 16-byte type sizes
+unsafe fn unshuffle16(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    todo!()
+}
+
+pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
+    let vectorized_chunk_size = typesize * mem::size_of::<__m128i>();
+    // If the blocksize is not a multiple of both the typesize and
+    // the vector size, round the blocksize down to the next value
+    // which is a multiple of both. The vectorized unshuffle can be
+    // used for that portion of the data, and the naive implementation
+    // can be used for the remaining portion.
+    let vectorizable_bytes = len - (len % vectorized_chunk_size);
+    let vectorizable_elements = vectorizable_bytes / typesize;
+    let total_elements = len / typesize;
+
+    // If the block size is too small to be vectorized,
+    // use the generic implementation.
+    if len < vectorized_chunk_size {
+        crate::generic::unshuffle(typesize, len, src, dst);
+        return;
+    }
+
+    if typesize == 2 {
+        unshuffle2(vectorizable_elements, total_elements, src, dst);
+    } else if typesize == 16 {
+        unshuffle16(vectorizable_elements, total_elements, src, dst);
+    } else {
+        crate::generic::unshuffle(typesize, len, src, dst);
+    }
+
+    // If the buffer had any bytes at the end which couldn't be handled
+    // by the vectorized implementations, use the non-optimized version
+    // to finish them up.
+    if vectorizable_bytes < len {
+        crate::generic::unshuffle_partial(typesize, vectorizable_bytes, len, src, dst);
+    }
+}
+
 #[cfg(test)]
 mod t {
     macro_rules! require_sse2 {
@@ -190,6 +268,35 @@ mod t {
             unsafe {
                 crate::generic::shuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
                 crate::sse2::shuffle(typesize, len, src.as_ptr(), sse2_dst.as_mut_ptr());
+            }
+            assert_eq!(generic_dst, sse2_dst);
+        }
+    }
+
+    mod unshuffle {
+        use rand::Rng;
+        use rstest::rstest;
+
+        #[rstest]
+        #[case(2, 16)]
+        #[case(2, 32)]
+        #[case(2, 64)]
+        #[case(2, 4096)]
+        #[case(16, 16)]
+        #[case(16, 64)]
+        #[case(16, 128)]
+        #[case(16, 256)]
+        #[case(16, 4096)]
+        fn compare(#[case] typesize: usize, #[case] len: usize) {
+            require_sse2!();
+            let mut rng = rand::rng();
+
+            let src = (0..len).map(|_| rng.random()).collect::<Vec<u8>>();
+            let mut generic_dst = vec![0u8; len];
+            let mut sse2_dst = vec![0u8; len];
+            unsafe {
+                crate::generic::unshuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
+                crate::sse2::unshuffle(typesize, len, src.as_ptr(), sse2_dst.as_mut_ptr());
             }
             assert_eq!(generic_dst, sse2_dst);
         }
