@@ -350,6 +350,32 @@ mod t {
         use rand::Rng;
         use rstest::rstest;
 
+        /// Compare optimized results against generic results
+        #[rstest]
+        #[case::sse2(crate::sse2::unshuffle, is_x86_feature_detected!("sse2"))]
+        fn compare(
+            #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
+            #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
+            #[case] f: unsafe fn(usize, usize, *const u8, *mut u8),
+            #[case] has_feature: bool,
+        ) {
+            if !has_feature {
+                eprintln!("Skipping: CPU feature unavailable.");
+                return;
+            }
+
+            let mut rng = rand::rng();
+
+            let src = (0..len).map(|_| rng.random()).collect::<Vec<u8>>();
+            let mut generic_dst = vec![0u8; len];
+            let mut opt_dst = vec![0u8; len];
+            unsafe {
+                crate::generic::unshuffle(typesize, len, src.as_ptr(), generic_dst.as_mut_ptr());
+                f(typesize, len, src.as_ptr(), opt_dst.as_mut_ptr());
+            }
+            assert_eq!(generic_dst, opt_dst);
+        }
+
         /// unshuffle_bytes should be the inverse of shuffle_bytes
         #[rstest]
         fn inverse(

@@ -257,6 +257,84 @@ unsafe fn unshuffle16(
     }
 }
 
+/// SSE2 optimized unshuffle for type sizes larger than 16 bytes
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
+unsafe fn unshuffle_tiled(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    ts: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    let mut xmm1: [__m128i; 16] = mem::zeroed();
+    let mut xmm2: [__m128i; 16] = mem::zeroed();
+    let vecs_rem = ts % SO128I;
+
+    // The unshuffle loops are inverted (compared to shuffle_tiled16_sse2)
+    // to optimize cache utilization.
+    let mut off_in_ty = 0;
+    while off_in_ty < ts {
+        for i in (0..vectorizable_elements).step_by(SO128I) {
+            // Load the first 128 bytes in 16 XMM registers
+            for j in 0..16 {
+                let p = src.add(i + total_elements * (off_in_ty + j)) as *const __m128i;
+                xmm1[j] = _mm_loadu_si128(p);
+            }
+            // Shuffle bytes
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                xmm2[j] = _mm_unpacklo_epi8(xmm1[j * 2], xmm1[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                xmm2[8 + j] = _mm_unpackhi_epi8(xmm1[j * 2], xmm1[j * 2 + 1]);
+            }
+            // Shuffle 2-byte words
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                xmm1[j] = _mm_unpacklo_epi16(xmm2[j * 2], xmm2[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                xmm1[8 + j] = _mm_unpackhi_epi16(xmm2[j * 2], xmm2[j * 2 + 1]);
+            }
+            // Shuffle 4-byte dwords
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                xmm2[j] = _mm_unpacklo_epi32(xmm1[j * 2], xmm1[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                xmm2[8 + j] = _mm_unpackhi_epi32(xmm1[j * 2], xmm1[j * 2 + 1]);
+            }
+            // Shuffle 8-byte qwords
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                xmm1[j] = _mm_unpacklo_epi64(xmm2[j * 2], xmm2[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                xmm1[8 + j] = _mm_unpackhi_epi64(xmm2[j * 2], xmm2[j * 2 + 1]);
+            }
+            // Store the result vectors in proper order
+            #[allow(clippy::identity_op)]
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 0) * ts) as *mut __m128i, xmm1[0]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 1) * ts) as *mut __m128i, xmm1[8]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 2) * ts) as *mut __m128i, xmm1[4]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 3) * ts) as *mut __m128i, xmm1[12]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 4) * ts) as *mut __m128i, xmm1[2]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 5) * ts) as *mut __m128i, xmm1[10]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 6) * ts) as *mut __m128i, xmm1[6]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 7) * ts) as *mut __m128i, xmm1[14]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 8) * ts) as *mut __m128i, xmm1[1]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 9) * ts) as *mut __m128i, xmm1[9]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 10) * ts) as *mut __m128i, xmm1[5]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 11) * ts) as *mut __m128i, xmm1[13]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 12) * ts) as *mut __m128i, xmm1[3]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 13) * ts) as *mut __m128i, xmm1[11]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 14) * ts) as *mut __m128i, xmm1[7]);
+            _mm_storeu_si128(dst.add(off_in_ty + (i + 15) * ts) as *mut __m128i, xmm1[15]);
+        }
+        off_in_ty += if off_in_ty == 0 && vecs_rem > 0 {
+            vecs_rem
+        } else {
+            SO128I
+        };
+    }
+}
+
 pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
     let vectorized_chunk_size = typesize * mem::size_of::<__m128i>();
     // If the blocksize is not a multiple of both the typesize and
@@ -279,6 +357,8 @@ pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u
         unshuffle2(vectorizable_elements, total_elements, src, dst);
     } else if typesize == 16 {
         unshuffle16(vectorizable_elements, total_elements, src, dst);
+    } else if typesize > SO128I {
+        unshuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
         crate::generic::unshuffle(typesize, len, src, dst);
     }
