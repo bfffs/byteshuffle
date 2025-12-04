@@ -121,6 +121,77 @@ unsafe fn shuffle16(
     }
 }
 
+/// SSE2 optimized shuffle for type sizes larger than 16 bytes
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
+unsafe fn shuffle_tiled(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    ts: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    let mut xmm0: [__m128i; 16] = mem::zeroed();
+    let mut xmm1: [__m128i; 16] = mem::zeroed();
+    let vecs_rem = ts % SO128I;
+
+    for j in (0..vectorizable_elements).step_by(SO128I) {
+        // Advance the offset into the type by the vector size (in bytes), unless this is
+        // the initial iteration and the type size is not a multiple of the vector size.
+        // In that case, only advance by the number of bytes necessary so that the number
+        // of remaining bytes in the type will be a multiple of the vector size.
+        let mut off_in_ty = 0;
+        while off_in_ty < ts {
+            // Fetch elements in groups of 256 bytes
+            for k in 0..16 {
+                xmm0[k] = _mm_loadu_si128(src.add(off_in_ty + (j + k) * ts) as *const __m128i);
+            }
+            // Transpose bytes
+            for k in 0..8 {
+                let l = k * 2;
+                xmm1[k * 2] = _mm_unpacklo_epi8(xmm0[l], xmm0[l + 1]);
+                xmm1[k * 2 + 1] = _mm_unpackhi_epi8(xmm0[l], xmm0[l + 1]);
+            }
+            // Transpose words
+            let mut l = 0;
+            for k in 0..8 {
+                xmm0[k * 2] = _mm_unpacklo_epi16(xmm1[l], xmm1[l + 2]);
+                xmm0[k * 2 + 1] = _mm_unpackhi_epi16(xmm1[l], xmm1[l + 2]);
+                l += 1;
+                if (k % 2) == 1 {
+                    l += 2;
+                }
+            }
+            // Transpose double words
+            let mut l = 0;
+            for k in 0..8 {
+                xmm1[k * 2] = _mm_unpacklo_epi32(xmm0[l], xmm0[l + 4]);
+                xmm1[k * 2 + 1] = _mm_unpackhi_epi32(xmm0[l], xmm0[l + 4]);
+                l += 1;
+                if (k % 4) == 3 {
+                    l += 4;
+                }
+            }
+            // Transpose quad words
+            for k in 0..8 {
+                xmm0[k * 2] = _mm_unpacklo_epi64(xmm1[k], xmm1[k + 8]);
+                xmm0[k * 2 + 1] = _mm_unpackhi_epi64(xmm1[k], xmm1[k + 8]);
+            }
+            // Store the result vectors
+            for k in 0..16 {
+                _mm_storeu_si128(
+                    dst.add(j + total_elements * (off_in_ty + k)) as *mut __m128i,
+                    xmm0[k],
+                );
+            }
+            off_in_ty += if off_in_ty == 0 && vecs_rem > 0 {
+                vecs_rem
+            } else {
+                SO128I
+            }
+        }
+    }
+}
+
 pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
     let vectorized_chunk_size = typesize * mem::size_of::<__m128i>();
     // If the blocksize is not a multiple of both the typesize and
@@ -143,6 +214,8 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
         shuffle2(vectorizable_elements, total_elements, src, dst);
     } else if typesize == 16 {
         shuffle16(vectorizable_elements, total_elements, src, dst);
+    } else if typesize > SO128I {
+        shuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
         crate::generic::shuffle(typesize, len, src, dst)
     }
@@ -396,6 +469,7 @@ mod t {
         #[case(16, 128)]
         #[case(16, 256)]
         #[case(16, 4096)]
+        #[case(18, 288)]
         fn compare(#[case] typesize: usize, #[case] len: usize) {
             require_sse2!();
             let mut rng = rand::rng();
