@@ -283,7 +283,7 @@ mod t {
                         is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
                         )]
         fn compare(
-            #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
+            #[values(2, 4, 8, 13, 16, 18, 32, 36, 43, 47)] typesize: usize,
             #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
             #[case] f: unsafe fn(usize, usize, *const u8, *mut u8),
             #[case] has_feature: bool,

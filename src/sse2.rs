@@ -217,7 +217,9 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     } else if typesize > SO128I {
         shuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
-        crate::generic::shuffle(typesize, len, src, dst)
+        crate::generic::shuffle(typesize, len, src, dst);
+        // The generic routine leaves no remainder left to shuffle
+        return;
     }
 
     // If the buffer had any bytes at the end which couldn't be handled
@@ -434,6 +436,8 @@ pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u
         unshuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
         crate::generic::unshuffle(typesize, len, src, dst);
+        // The generic routine leaves no remainder left to shuffle
+        return;
     }
 
     // If the buffer had any bytes at the end which couldn't be handled
