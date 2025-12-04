@@ -351,6 +351,77 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     }
 }
 
+/// AVX2 optimized unshuffle for 2-byte type sizes
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
+unsafe fn unshuffle2(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    const TS: usize = 2;
+    let mut ymm0: [__m256i; 2] = mem::zeroed();
+    let mut ymm1: [__m256i; 2] = mem::zeroed();
+
+    for i in (0..vectorizable_elements).step_by(SO256I) {
+        // Load 32 elements (64 bytes) into 2 YMM registers.
+        for j in 0..2 {
+            ymm0[j] = _mm256_loadu_si256(src.add(i + (j * total_elements)) as *mut __m256i);
+        }
+        // Shuffle bytes
+        for j in 0..2 {
+            ymm0[j] = _mm256_permute4x64_epi64(ymm0[j], 0xd8);
+        }
+        // Compute the low 64 bytes
+        ymm1[0] = _mm256_unpacklo_epi8(ymm0[0], ymm0[1]);
+        // Compute the hi 64 bytes
+        ymm1[1] = _mm256_unpackhi_epi8(ymm0[0], ymm0[1]);
+        // Store the result vectors in proper order
+        #[allow(clippy::erasing_op)]
+        _mm256_storeu_si256(dst.add(i * TS + 0 * SO256I) as *mut __m256i, ymm1[0]);
+        #[allow(clippy::identity_op)]
+        _mm256_storeu_si256(dst.add(i * TS + 1 * SO256I) as *mut __m256i, ymm1[1]);
+    }
+}
+
+pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
+    let vectorized_chunk_size = typesize * mem::size_of::<__m256i>();
+    // If the blocksize is not a multiple of both the typesize and
+    // the vector size, round the blocksize down to the next value
+    // which is a multiple of both. The vectorized unshuffle can be
+    // used for that portion of the data, and the naive implementation
+    // can be used for the remaining portion.
+    let vectorizable_bytes = len - (len % vectorized_chunk_size);
+    let vectorizable_elements = vectorizable_bytes / typesize;
+    let total_elements = len / typesize;
+
+    // If the block size is too small to be vectorized,
+    // use the generic implementation.
+    if len < vectorized_chunk_size {
+        crate::generic::unshuffle(typesize, len, src, dst);
+        return;
+    }
+
+    if typesize == 2 {
+        unshuffle2(vectorizable_elements, total_elements, src, dst);
+    //} else if typesize == 16 {
+    // unshuffle16(vectorizable_elements, total_elements, src, dst);
+    //} else if typesize > SO128I {
+    // unshuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
+    } else {
+        crate::generic::unshuffle(typesize, len, src, dst);
+        // The generic routine leaves no remainder left to shuffle
+        return;
+    }
+
+    // If the buffer had any bytes at the end which couldn't be handled
+    // by the vectorized implementations, use the non-optimized version
+    // to finish them up.
+    if vectorizable_bytes < len {
+        crate::generic::unshuffle_partial(typesize, vectorizable_bytes, len, src, dst);
+    }
+}
+
 #[cfg(test)]
 mod t {
     macro_rules! require_avx2 {

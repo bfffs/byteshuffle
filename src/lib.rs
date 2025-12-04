@@ -96,9 +96,9 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
             match impl_ {
                 SimdImpl::Auto => {
                     if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw"){
-                        unsafe { IMPL = (avx512f::shuffle, sse2::unshuffle); }
+                        unsafe { IMPL = (avx512f::shuffle, avx2::unshuffle); }
                     } else if is_x86_feature_detected!("avx2") {
-                        unsafe { IMPL = (avx2::shuffle, sse2::unshuffle); }
+                        unsafe { IMPL = (avx2::shuffle, avx2::unshuffle); }
                     } else if is_x86_feature_detected!("sse2") {
                         unsafe { IMPL = (sse2::shuffle, sse2::unshuffle); }
                     } else {
