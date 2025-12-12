@@ -331,9 +331,9 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
     let total_elements = len / typesize;
 
     // If the block size is too small to be vectorized,
-    // use the generic implementation.
+    // use the sse2 implementation, which has a smaller chunk size.
     if len < vectorized_chunk_size {
-        crate::generic::shuffle(typesize, len, src, dst);
+        crate::sse2::shuffle(typesize, len, src, dst);
         return;
     }
 
