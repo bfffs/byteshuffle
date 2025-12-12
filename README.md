@@ -23,6 +23,18 @@ performance.  So while it will run anywhere, it will only achieve good
 performance on x86_64 and x86 processors.  Implementations for additional
 architectures are welcome.
 
+# SIMD implementations
+
+SIMD acceleration is implemented for certain type sizes and certain instruction
+sets only.  Currently accelerated operations are:
+
+| Typesize | SSE2 | AVX2 | AVX512F      |
+| -------- | ---- | ---- | ------------ |       
+|       2B | both | both | shuffle only |
+|      16B | both | both | shuffle only |
+|    > 16B | both | both |              |
+|     x 4B |      |      | shuffle only |
+
 # Minimum Supported Rust Version (MSRV)
 
 Byteshuffle is supported on Rust 1.89.0 and higher.  Byteshuffle's MSRV will
