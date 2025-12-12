@@ -15,6 +15,7 @@ use simd::{
     _mm256_permute4x64_epi64,
     _mm256_set_epi8,
     _mm256_shuffle_epi8,
+    _mm256_storeu2_m128i,
     _mm256_storeu_si256,
     _mm256_unpackhi_epi16,
     _mm256_unpackhi_epi32,
@@ -466,6 +467,157 @@ unsafe fn unshuffle16(
     }
 }
 
+/// AVX2 optimized unshuffle for type sizes larger than 16 bytes
+// Author: Francesc Alted <francesc@blosc.org>
+#[allow(clippy::needless_range_loop)] // I don't like this suggestion
+unsafe fn unshuffle_tiled(
+    vectorizable_elements: usize,
+    total_elements: usize,
+    ts: usize,
+    src: *const u8,
+    dst: *mut u8,
+) {
+    let mut ymm0: [__m256i; 16] = mem::zeroed();
+    let mut ymm1: [__m256i; 16] = mem::zeroed();
+    let vecs_rem = ts % SO128I;
+
+    // The unshuffle loops are inverted (compared to shuffle_tiled16_avx2)
+    // to optimize cache utilization.
+    let mut off_in_ty = 0;
+    while off_in_ty < ts {
+        for i in (0..vectorizable_elements).step_by(SO256I) {
+            // Load the first 16 bytes of 32 adjacent elements (512 bytes) into 16 YMM registers
+            for j in 0..16 {
+                let p = src.add(i + total_elements * (off_in_ty + j)) as *const __m256i;
+                ymm0[j] = _mm256_loadu_si256(p);
+            }
+
+            // Shuffle bytes
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                ymm1[j] = _mm256_unpacklo_epi8(ymm0[j * 2], ymm0[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                ymm1[8 + j] = _mm256_unpackhi_epi8(ymm0[j * 2], ymm0[j * 2 + 1]);
+            }
+            // Shuffle 2-byte words
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                ymm0[j] = _mm256_unpacklo_epi16(ymm1[j * 2], ymm1[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                ymm0[8 + j] = _mm256_unpackhi_epi16(ymm1[j * 2], ymm1[j * 2 + 1]);
+            }
+            // Shuffle 4-byte dwords
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                ymm1[j] = _mm256_unpacklo_epi32(ymm0[j * 2], ymm0[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                ymm1[8 + j] = _mm256_unpackhi_epi32(ymm0[j * 2], ymm0[j * 2 + 1]);
+            }
+
+            // Shuffle 8-byte qwords
+            for j in 0..8 {
+                // Compute the low 32 bytes
+                ymm0[j] = _mm256_unpacklo_epi64(ymm1[j * 2], ymm1[j * 2 + 1]);
+                // Compute the hi 32 bytes
+                ymm0[8 + j] = _mm256_unpackhi_epi64(ymm1[j * 2], ymm1[j * 2 + 1]);
+            }
+
+            for j in 0..8 {
+                ymm1[j] = _mm256_permute2x128_si256(ymm0[j], ymm0[j + 8], 0x20);
+                ymm1[j + 8] = _mm256_permute2x128_si256(ymm0[j], ymm0[j + 8], 0x31);
+            }
+
+            // Store the result vectors in proper order
+            #[allow(clippy::identity_op)]
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 1) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 0) * ts) as *mut __m128i,
+                ymm1[0],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 3) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 2) * ts) as *mut __m128i,
+                ymm1[4],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 5) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 4) * ts) as *mut __m128i,
+                ymm1[2],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 7) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 6) * ts) as *mut __m128i,
+                ymm1[6],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 9) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 8) * ts) as *mut __m128i,
+                ymm1[1],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 11) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 10) * ts) as *mut __m128i,
+                ymm1[5],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 13) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 12) * ts) as *mut __m128i,
+                ymm1[3],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 15) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 14) * ts) as *mut __m128i,
+                ymm1[7],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 17) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 16) * ts) as *mut __m128i,
+                ymm1[8],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 19) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 18) * ts) as *mut __m128i,
+                ymm1[12],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 21) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 20) * ts) as *mut __m128i,
+                ymm1[10],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 23) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 22) * ts) as *mut __m128i,
+                ymm1[14],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 25) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 24) * ts) as *mut __m128i,
+                ymm1[9],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 27) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 26) * ts) as *mut __m128i,
+                ymm1[13],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 29) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 28) * ts) as *mut __m128i,
+                ymm1[11],
+            );
+            _mm256_storeu2_m128i(
+                dst.add(off_in_ty + (i + 31) * ts) as *mut __m128i,
+                dst.add(off_in_ty + (i + 30) * ts) as *mut __m128i,
+                ymm1[15],
+            );
+        }
+        off_in_ty += if off_in_ty == 0 && vecs_rem > 0 {
+            vecs_rem
+        } else {
+            SO128I
+        };
+    }
+}
+
 pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8) {
     let vectorized_chunk_size = typesize * mem::size_of::<__m256i>();
     // If the blocksize is not a multiple of both the typesize and
@@ -488,8 +640,8 @@ pub unsafe fn unshuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u
         unshuffle2(vectorizable_elements, total_elements, src, dst);
     } else if typesize == 16 {
         unshuffle16(vectorizable_elements, total_elements, src, dst);
-    //} else if typesize > SO128I {
-    // unshuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
+    } else if typesize > SO128I {
+        unshuffle_tiled(vectorizable_elements, total_elements, typesize, src, dst);
     } else {
         crate::generic::unshuffle(typesize, len, src, dst);
         // The generic routine leaves no remainder left to shuffle
@@ -579,6 +731,8 @@ mod t {
         #[case(2, 4096)]
         #[case(16, 512)]
         #[case(16, 4096)]
+        #[case(17, 272)]
+        #[case(17, 4096)]
         fn compare(#[case] typesize: usize, #[case] len: usize) {
             require_avx2!();
             let mut rng = rand::rng();

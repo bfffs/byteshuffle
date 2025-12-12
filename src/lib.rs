@@ -353,6 +353,7 @@ mod t {
         /// Compare optimized results against generic results
         #[rstest]
         #[case::sse2(crate::sse2::unshuffle, is_x86_feature_detected!("sse2"))]
+        #[case::avx2(crate::avx2::unshuffle, is_x86_feature_detected!("avx2"))]
         fn compare(
             #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
             #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
