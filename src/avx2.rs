@@ -29,6 +29,7 @@ const SO256I: usize = mem::size_of::<__m256i>();
 const SO128I: usize = mem::size_of::<__m128i>();
 
 /// AVX2 optimized shuffle for 2-byte type sizes,
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx2")]
 unsafe fn shuffle2(
@@ -75,6 +76,7 @@ unsafe fn shuffle2(
 }
 
 /// AVX2 optimized shuffle for 16-byte type sizes,
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx2")]
 unsafe fn shuffle16(
@@ -148,6 +150,7 @@ unsafe fn shuffle16(
 }
 
 /// AVX2 optimized shuffle for type sizes greater than 16 bytes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx2")]
 unsafe fn shuffle_tiled(
@@ -239,6 +242,7 @@ unsafe fn shuffle_tiled(
 // registers than the other one.
 //
 // /// AVX2 optimized shuffle for 16-byte type sizes,
+// // Author: Alan Somers <asomers@gmail.com>
 // #[allow(clippy::needless_range_loop)]   // I don't like this suggestion
 // #[target_feature(enable = "avx2")]
 // unsafe fn shuffle16(
@@ -352,6 +356,7 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
 }
 
 /// AVX2 optimized unshuffle for 2-byte type sizes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn unshuffle2(
     vectorizable_elements: usize,

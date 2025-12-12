@@ -53,6 +53,7 @@ unsafe fn shuffle_8x4(ymm: __m256i) -> __m256i {
 }
 
 /// AVX-512F optimized shuffle for 2-byte type sizes,
+// Author: Alan Somers <asomers@gmail.com>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
 #[target_feature(enable = "avx512bw")]
@@ -96,6 +97,7 @@ unsafe fn shuffle2(
 }
 
 /// AVX512F optimized shuffle for 16-byte type sizes
+// Author: Alan Somers <asomers@gmail.com>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
 #[target_feature(enable = "avx512bw")]
@@ -168,6 +170,7 @@ unsafe fn shuffle16(
 /// AVX512F optimized shuffle for type sizes of at least 16 bytes
 // Even though it doesn't use 512-bit registers, this requires AVX-512F + AVX512VL due to the
 // _mm256_i32scatter_epi32 function.
+// Author: Alan Somers <asomers@gmail.com>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[target_feature(enable = "avx512f")]
 #[target_feature(enable = "avx512vl")]

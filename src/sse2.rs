@@ -25,6 +25,7 @@ use simd::{
 const SO128I: usize = mem::size_of::<__m128i>();
 
 /// SSE2 optimized shuffle for 2-byte type sizes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn shuffle2(
     vectorizable_elements: usize,
@@ -64,6 +65,7 @@ unsafe fn shuffle2(
 }
 
 /// SSE2 optimized shuffle for 16-byte type sizes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 #[inline(never)]
 unsafe fn shuffle16(
@@ -122,6 +124,7 @@ unsafe fn shuffle16(
 }
 
 /// SSE2 optimized shuffle for type sizes larger than 16 bytes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn shuffle_tiled(
     vectorizable_elements: usize,
@@ -231,6 +234,7 @@ pub unsafe fn shuffle(typesize: usize, len: usize, src: *const u8, dst: *mut u8)
 }
 
 /// SSE2 optimized unshuffle for 2-byte type sizes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn unshuffle2(
     vectorizable_elements: usize,
@@ -264,6 +268,7 @@ unsafe fn unshuffle2(
 }
 
 /// SSE2 optimized unshuffle for 16-byte type sizes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn unshuffle16(
     vectorizable_elements: usize,
@@ -333,6 +338,7 @@ unsafe fn unshuffle16(
 }
 
 /// SSE2 optimized unshuffle for type sizes larger than 16 bytes
+// Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
 unsafe fn unshuffle_tiled(
     vectorizable_elements: usize,
