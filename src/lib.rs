@@ -25,6 +25,15 @@
 //! let unshuffled = unshuffle(2, &shuffled);
 //! assert_eq!(IN, &unshuffled[..]);
 //! ```
+//!
+//! # Crate Features
+//!
+//! This crate has a "nightly" feature.  It enables methods that require the use of types from the
+//! standard library that aren't yet stabilized.
+#![cfg_attr(feature = "nightly", feature(core_io_borrowed_buf))]
+
+#[cfg(feature = "nightly")]
+use std::io::BorrowedCursor;
 use std::{mem, str::FromStr};
 
 use cfg_if::cfg_if;
@@ -173,6 +182,50 @@ pub fn shuffle(typesize: usize, src: &[u8]) -> Vec<u8> {
     dst
 }
 
+/// Like [`shuffle`], but allows the caller to control allocation for the output.
+///
+/// # Examples
+/// ```
+/// # use byteshuffle::*;
+/// const IN: [u8; 8] = [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
+/// let mut out = [0u8; 8];
+/// shuffle_into(2, &IN, &mut out);
+/// assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);
+/// ```
+pub fn shuffle_into(typesize: usize, src: &[u8], dst: &mut [u8]) {
+    assert_eq!(src.len(), dst.len());
+    // Safe because src and dst have the same length
+    unsafe {
+        IMPL.0(typesize, src.len(), src.as_ptr(), dst.as_mut_ptr());
+    }
+}
+
+/// Like [`shuffle_into`], but works with uninitialized output buffers.
+///
+/// # Example
+/// ```
+/// #![cfg_attr(feature = "nightly", feature(core_io_borrowed_buf))]
+/// use byteshuffle::*;
+/// use std::io::BorrowedBuf;
+/// use std::mem::MaybeUninit;
+///
+/// const IN: [u8; 8] = [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
+/// let mut outvec = [MaybeUninit::uninit(); 8];
+/// let mut buf = BorrowedBuf::from(&mut outvec[..]);
+/// shuffle_buf(2, &IN, buf.unfilled());
+/// assert_eq!(buf.filled(), [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);
+/// ```
+#[cfg(feature = "nightly")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nightly")))]
+pub fn shuffle_buf(typesize: usize, src: &[u8], mut buf: BorrowedCursor<'_>) {
+    assert!(buf.capacity() >= src.len());
+    unsafe {
+        let dst: *mut u8 = buf.as_mut().as_mut_ptr().cast();
+        IMPL.0(typesize, src.len(), src.as_ptr(), dst);
+        buf.advance(src.len());
+    }
+}
+
 /// Unshuffle an array of fixed-size objects.
 ///
 /// # Safety
@@ -226,6 +279,50 @@ pub fn unshuffle(typesize: usize, src: &[u8]) -> Vec<u8> {
     }
     assert_eq!(src.len(), dst.len());
     dst
+}
+
+/// Like [`unshuffle`], but allows the caller to control allocation for the destination.
+///
+/// # Example
+/// ```
+/// use byteshuffle::*;
+///
+/// const IN: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04];
+/// let mut out = [0u8; 8];
+/// unshuffle_into(2, &IN, &mut out);
+/// assert_eq!(out, [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04]);
+/// ```
+pub fn unshuffle_into(typesize: usize, src: &[u8], dst: &mut [u8]) {
+    assert_eq!(src.len(), dst.len());
+    unsafe {
+        IMPL.1(typesize, src.len(), src.as_ptr(), dst.as_mut_ptr());
+    }
+}
+
+/// Like [`unshuffle_into`], but works with uninitialized output buffers.
+///
+/// # Example
+/// ```
+/// #![cfg_attr(feature = "nightly", feature(core_io_borrowed_buf))]
+/// use byteshuffle::*;
+/// use std::io::BorrowedBuf;
+/// use std::mem::MaybeUninit;
+///
+/// const IN: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04];
+/// let mut outvec = [MaybeUninit::uninit(); 8];
+/// let mut buf = BorrowedBuf::from(&mut outvec[..]);
+/// unshuffle_buf(2, &IN, buf.unfilled());
+/// assert_eq!(buf.filled(), [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04]);
+/// ```
+#[cfg(feature = "nightly")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nightly")))]
+pub fn unshuffle_buf(typesize: usize, src: &[u8], mut buf: BorrowedCursor<'_>) {
+    assert!(buf.capacity() >= src.len());
+    unsafe {
+        let dst: *mut u8 = buf.as_mut().as_mut_ptr().cast();
+        IMPL.1(typesize, src.len(), src.as_ptr(), dst);
+        buf.advance(src.len());
+    }
 }
 
 #[cfg(test)]

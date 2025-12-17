@@ -14,6 +14,13 @@ description = """
 SIMD-accelerated byte shuffle/unshuffle functions
 """
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+nightly = []
+
 [dependencies]
 cfg-if = "1.0"
 ctor = { version = "0.6.0", default-features = false, features = ["proc_macro"] }

@@ -1,6 +1,6 @@
 use std::{env, str::FromStr, time::Duration};
 
-use byteshuffle::{shuffle, SimdImpl};
+use byteshuffle::{shuffle_into, SimdImpl};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 struct Spec {
@@ -51,11 +51,10 @@ fn shuffle_(c: &mut Criterion) {
     {
         g.throughput(Throughput::Bytes(spec.size as u64));
         let id = BenchmarkId::from_parameter(spec.name);
+        let src = vec![0u8; spec.size];
         g.bench_with_input(id, &spec, |b, spec| {
-            let src = vec![0u8; spec.size];
-            // TODO: provide a "shuffle_buf" function that takes a BorrowedBuf object, allowing the
-            // caller to handle allocation.
-            b.iter(|| shuffle(spec.typesize, &src[..]))
+            let mut dst = vec![0u8; spec.size];
+            b.iter(|| shuffle_into(spec.typesize, &src[..], &mut dst[..]))
         });
     }
 }
