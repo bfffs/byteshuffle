@@ -18,14 +18,12 @@
 //! ```
 //! # use byteshuffle::*;
 //! const IN: [u8; 8] = [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
-//! let mut shuffled = [0u8; 8];
-//! shuffle_bytes(2, &IN, &mut shuffled);
-//! assert_ne!(IN, shuffled);
+//! let shuffled = shuffle(2, &IN);
+//! assert_ne!(IN, &shuffled[..]);
 //! // In normal use, you would now serialize `shuffled`.  Then compress it, and later decompress
 //! // and deserialize it.  Then unshuffle like below.
-//! let mut unshuffled = [0u8; 8];
-//! unshuffle_bytes(2, &shuffled, &mut unshuffled);
-//! assert_eq!(IN, unshuffled);
+//! let unshuffled = unshuffle(2, &shuffled);
+//! assert_eq!(IN, &unshuffled[..]);
 //! ```
 use std::{mem, str::FromStr};
 
@@ -121,14 +119,13 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
 /// The result will be a shuffled byte array.  Be aware that this byte array will usually not be
 /// portable.  It can only be unshuffled by the same computer architecture as the one that shuffled
 /// it, and sometimes only by the same compiler version.  If portability is desired, then first
-/// serialize the data and then use [`shuffle_bytes`].
+/// serialize the data and then use [`shuffle`].
 ///
 /// # Examples
 /// ```
 /// # use byteshuffle::*;
 /// const IN: [u16; 4] = [0x01, 0x02, 0x03, 0x04];
-/// let mut out = [0u8; 8];
-/// shuffle(&IN, &mut out);
+/// let out = shuffle_objects(&IN);
 #[cfg_attr(
     target_endian = "little",
     doc = "assert_eq!(out, [0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00]);"
@@ -138,20 +135,21 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
     doc = "assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);"
 )]
 /// ```
-// TODO: rename to "shuffle_objects", and allocate the output.
-pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
+pub fn shuffle_objects<T: Copy>(src: &[T]) -> Vec<u8> {
     let ts = mem::size_of::<T>();
-    assert_eq!(mem::size_of_val(src), dst.len());
     assert!(ts > 1, "No point shuffling plain [u8]");
-    // Safe because of the first assertion.
+    let mut dst = Vec::with_capacity(mem::size_of_val(src));
+    // Safe because we src and dst have same length in bytes
     unsafe {
         IMPL.0(
             ts,
             mem::size_of_val(src),
             src.as_ptr() as *const u8,
-            dst.as_ptr() as *mut u8,
+            dst.as_mut_ptr(),
         );
-    }
+        dst.set_len(mem::size_of_val(src));
+    };
+    dst
 }
 
 /// Shuffle a byte array whose contents are known to approximately repeat with
@@ -161,19 +159,18 @@ pub fn shuffle<T: Copy>(src: &[T], dst: &mut [u8]) {
 /// ```
 /// # use byteshuffle::*;
 /// const IN: [u8; 8] = [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
-/// let mut out = [0u8; 8];
-/// shuffle_bytes(2, &IN, &mut out);
+/// let out = shuffle(2, &IN);
 /// assert_eq!(out, [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]);
 /// ```
-// TODO: change typesize to u8.  Nothing larger will work, anyway.
-// TODO: rename to "shuffle" and allocate space for the output, for better symmetry with compressor
-// libraries' APIs, and to better match the needs of bfffs.
-pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
-    assert_eq!(src.len(), dst.len());
-    // Safe because of the first assertion.
+pub fn shuffle(typesize: usize, src: &[u8]) -> Vec<u8> {
+    let mut dst = Vec::with_capacity(src.len());
+    // Safe because src and dst have the same capacity
     unsafe {
-        IMPL.0(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
+        IMPL.0(typesize, src.len(), src.as_ptr(), dst.as_mut_ptr());
+        dst.set_len(src.len());
     }
+    assert_eq!(src.len(), dst.len());
+    dst
 }
 
 /// Unshuffle an array of fixed-size objects.
@@ -183,31 +180,32 @@ pub fn shuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
 /// The `src` must've originally been produced by [`shuffle`], by a program that uses the exact
 /// same byte layout as this one.  That means the same wordsize, same endianness, and may even
 /// require the same compiler version.  If you can't guarantee those conditions, then serialize and
-/// use [`shuffle_bytes`]/[`unshuffle_bytes`] instead.
+/// use [`shuffle`]/[`unshuffle`] instead.
 ///
 /// # Examples
 /// ```
 /// # use byteshuffle::*;
 /// const IN: [u16; 4] = [0x01, 0x02, 0x03, 0x04];
-/// let mut shuffled = [0u8; 8];
-/// shuffle(&IN, &mut shuffled);
-/// let mut out = [0u16; 4];
-/// unsafe { unshuffle(&shuffled, &mut out) };
-/// assert_eq!(IN, out);
+/// let mut shuffled = shuffle_objects(&IN);
+/// let out = unsafe { unshuffle_objects(&shuffled) };
+/// assert_eq!(IN, &out[..]);
 /// ```
-pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
+pub unsafe fn unshuffle_objects<T: Copy>(src: &[u8]) -> Vec<T> {
     let ts = mem::size_of::<T>();
-    assert_eq!(src.len(), mem::size_of_val(dst));
     assert!(ts > 1, "No point shuffling plain [u8]");
-    // Safe because of the first assertion.
+    let mut dst = Vec::with_capacity(src.len() / ts);
+    // Safe because we src and dst have same length in bytes
     unsafe {
         IMPL.1(
             ts,
-            mem::size_of_val(dst),
+            mem::size_of_val(src),
             src.as_ptr(),
-            dst.as_ptr() as *mut u8,
+            dst.as_mut_ptr() as *mut u8,
         );
+        dst.set_len(src.len() / ts);
     }
+    assert_eq!(mem::size_of_val(src), mem::size_of_val(&dst[..]));
+    dst
 }
 
 /// Unshuffle a byte array whose contents are known to approximately repeat with
@@ -217,31 +215,32 @@ pub unsafe fn unshuffle<T: Copy>(src: &[u8], dst: &mut [T]) {
 /// ```
 /// # use byteshuffle::*;
 /// const IN: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04];
-/// let mut out = [0u8; 8];
-/// unshuffle_bytes(2, &IN, &mut out);
+/// let out = unshuffle(2, &IN);
 /// assert_eq!(out, [0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04]);
 /// ```
-pub fn unshuffle_bytes(typesize: usize, src: &[u8], dst: &mut [u8]) {
-    assert_eq!(src.len(), dst.len());
+pub fn unshuffle(typesize: usize, src: &[u8]) -> Vec<u8> {
+    let mut dst = Vec::with_capacity(src.len());
     unsafe {
-        IMPL.1(typesize, src.len(), src.as_ptr(), dst.as_ptr() as *mut u8);
+        IMPL.1(typesize, src.len(), src.as_ptr(), dst.as_mut_ptr());
+        dst.set_len(src.len());
     }
+    assert_eq!(src.len(), dst.len());
+    dst
 }
 
 #[cfg(test)]
 mod t {
     use super::*;
 
-    /// Test the type-based shuffle API
-    mod shuffle {
+    /// Test the type-based shuffle_objects API
+    mod shuffle_objects {
         use super::*;
 
         // Two elements of two bytes each
         #[test]
         fn twobytwo() {
             let src = [0x1234u16, 0x5678u16];
-            let mut dst = [0u8; 4];
-            shuffle(&src[..], &mut dst[..]);
+            let dst = shuffle_objects(&src[..]);
             cfg_if! {
                 if #[cfg(target_endian = "big")] {
                     let expected = [0x78u8, 0x34, 0x56, 0x12];
@@ -256,8 +255,7 @@ mod t {
         #[test]
         fn fourbyfour() {
             let src = [0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00];
-            let mut dst = [0u8; 16];
-            shuffle(&src[..], &mut dst[..]);
+            let dst = shuffle_objects(&src[..]);
             cfg_if! {
                 if #[cfg(target_endian = "big")] {
                     let expected = [0x00u8, 0xcc, 0x88, 0x44, 0xff, 0xbb, 0x77, 0x33,
@@ -271,7 +269,7 @@ mod t {
         }
     }
 
-    mod shuffle_bytes {
+    mod shuffle {
         use rand::Rng;
         use rstest::rstest;
 
@@ -307,7 +305,7 @@ mod t {
     }
 
     /// Test the type-based shuffle API
-    mod unshuffle {
+    mod unshuffle_objects {
         use super::*;
 
         // Two elements of two bytes each
@@ -320,8 +318,7 @@ mod t {
                     let src = [0x34, 0x78u8, 0x12, 0x56];
                 }
             }
-            let mut dst = [0u16; 2];
-            unsafe { unshuffle(&src[..], &mut dst[..]) };
+            let dst = unsafe { unshuffle_objects::<u16>(&src[..]) };
             assert_eq!(dst, &[0x1234u16, 0x5678u16][..]);
         }
 
@@ -337,8 +334,7 @@ mod t {
                        0x22, 0x66, 0xaa, 0xee, 0x11, 0x55, 0x99, 0xdd];
                 }
             }
-            let mut dst = [0u32; 4];
-            unsafe { unshuffle(&src[..], &mut dst[..]) };
+            let dst = unsafe { unshuffle_objects::<u32>(&src[..]) };
             assert_eq!(
                 dst,
                 &[0x11223344u32, 0x55667788, 0x99aabbcc, 0xddeeff00][..]
@@ -346,7 +342,7 @@ mod t {
         }
     }
 
-    mod unshuffle_bytes {
+    mod unshuffle {
         use rand::Rng;
         use rstest::rstest;
 
@@ -377,7 +373,7 @@ mod t {
             assert_eq!(generic_dst, opt_dst);
         }
 
-        /// unshuffle_bytes should be the inverse of shuffle_bytes
+        /// unshuffle should be the inverse of shuffle
         #[rstest]
         fn inverse(
             #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
