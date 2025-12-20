@@ -11,7 +11,7 @@ this filter frequently results in lengthy continuous runs of identical bytes.
 Such runs are highly compressible by general-purpose compression libraries like
 gzip, lz4, etc.
 
-![Build Status](https://api.cirrus-ci.com/github/asomers/byteshuffle.svg)
+![Build Status](https://api.cirrus-ci.com/github/bfffs/byteshuffle.svg)
 [![Crates.io](https://img.shields.io/crates/v/byteshuffle.svg)](https://crates.io/crates/byteshuffle)
 
 [Documentation](https://docs.rs/crate/byteshuffle)
@@ -42,15 +42,16 @@ not be changed in the future without bumping the major or minor version.
 
 # License
 
-`byteshuffle` is primarily distributed under the terms of the BSD 3-clause license.
+`byteshuffle` is primarily distributed under the terms of the BSD 3-clause
+license.
 
 See LICENSE for details.
 
 # Acknowledgements
 
-The [blosc](https://www.blosc.org) project was the original inspiration for this library.
-Blosc is a C library intended primarily for HPC users, and it implements a
-shuffle filter, among many other things.  This crate is a reimplementation of
-Blosc's shuffle filter.  Some of the SIMD-optimized functions were directly
-translated from C-Blosc's C source, and others were written fresh.  But it
-excludes every other feature of Blosc.
+The [blosc](https://www.blosc.org) project was the original inspiration for
+this library.  Blosc is a C library intended primarily for HPC users, and it
+implements a shuffle filter, among many other things.  This crate is a
+reimplementation of Blosc's shuffle filter.  Some of the SIMD-optimized
+functions were directly translated from C-Blosc's C source, and others were
+written fresh.  But it excludes every other feature of Blosc.
