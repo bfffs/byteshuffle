@@ -31,6 +31,7 @@
 //! This crate has a "nightly" feature.  It enables methods that require the use of types from the
 //! standard library that aren't yet stabilized.
 #![cfg_attr(feature = "nightly", feature(core_io_borrowed_buf))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "nightly")]
 use std::io::BorrowedCursor;
