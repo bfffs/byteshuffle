@@ -40,9 +40,12 @@ use std::{mem, str::FromStr};
 use cfg_if::cfg_if;
 use ctor::ctor;
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx2;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx512f;
 mod generic;
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod sse2;
 
 type LlFunc = unsafe fn(usize, usize, *const u8, *mut u8);
@@ -100,7 +103,7 @@ fn select_implementation_ctor() {
 pub unsafe fn select_implementation(impl_: SimdImpl) {
     // Safe because ctor guarantees only one writer at a time
     cfg_if! {
-        if #[cfg(any(target_arch = "x86_64", target_arch = "x86"))] {
+        if #[cfg(any(target_arch = "x86", target_arch = "x86_64"))] {
             match impl_ {
                 SimdImpl::Auto => {
                     if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw"){
@@ -119,6 +122,7 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
                 SimdImpl::Avx512F => unsafe { IMPL = (avx512f::shuffle, sse2::unshuffle); },
             }
         } else {
+            let _ = impl_;
             unsafe { IMPL = (generic::shuffle, generic::unshuffle); }
         }
     }
@@ -368,16 +372,23 @@ mod t {
     }
 
     mod shuffle {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         use rand::Rng;
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         use rstest::rstest;
 
         /// Compare optimized results against generic results
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         #[rstest]
-        #[case::sse2(crate::sse2::shuffle, is_x86_feature_detected!("sse2"))]
-        #[case::avx2(crate::avx2::shuffle, is_x86_feature_detected!("avx2"))]
-        #[case::avx512f(crate::avx512f::shuffle,
+        #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
+            case::sse2(crate::sse2::shuffle, is_x86_feature_detected!("sse2")))]
+        #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
+            case::avx2(crate::avx2::shuffle, is_x86_feature_detected!("avx2")))]
+        #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
+            case::avx512f(crate::avx512f::shuffle,
                         is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
-                        )]
+            )
+        )]
         fn compare(
             #[values(2, 4, 8, 13, 16, 18, 32, 36, 43, 47)] typesize: usize,
             #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
@@ -446,8 +457,11 @@ mod t {
 
         /// Compare optimized results against generic results
         #[rstest]
-        #[case::sse2(crate::sse2::unshuffle, is_x86_feature_detected!("sse2"))]
-        #[case::avx2(crate::avx2::unshuffle, is_x86_feature_detected!("avx2"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
+            case::sse2(crate::sse2::unshuffle, is_x86_feature_detected!("sse2")))]
+        #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
+            case::avx2(crate::avx2::unshuffle, is_x86_feature_detected!("avx2")))]
         fn compare(
             #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
             #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
