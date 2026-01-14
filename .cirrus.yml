@@ -19,9 +19,13 @@ task:
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 task:
-  name: stable
-  container:
-    image: rust:latest
+  matrix:
+    - name: stable x86_64
+      container:
+        image: rust:latest
+    - name: stable aarch64
+      arm_container:
+        image: rust:latest
   << : *COMMON
   test_script:
     # Use --all-targets to run the benchmarks in test mode
