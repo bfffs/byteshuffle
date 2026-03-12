@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased] - ReleaseDate
+
+### Added
+
+- Added SIMD acceleration for ARM NEON
+  (#[3](https://github.com/bfffs/byteshuffle/pull/3)
+
 ## [0.1.2] - 2026-01-13
 
 ### Fixed
