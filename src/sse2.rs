@@ -67,7 +67,6 @@ unsafe fn shuffle2(
 /// SSE2 optimized shuffle for 16-byte type sizes
 // Author: Francesc Alted <francesc@blosc.org>
 #[allow(clippy::needless_range_loop)] // I don't like this suggestion
-#[inline(never)]
 unsafe fn shuffle16(
     vectorizable_elements: usize,
     total_elements: usize,
