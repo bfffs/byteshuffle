@@ -45,6 +45,8 @@ mod avx2;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod avx512f;
 mod generic;
+#[cfg(target_arch = "aarch64")]
+mod neon;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod sse2;
 
@@ -60,11 +62,17 @@ pub enum SimdImpl {
     /// Don't use any SIMD accelerations
     Generic,
     /// Use the SSE2 instruction set
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     Sse2,
     /// Use the AVX2 instruction set
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     Avx2,
     /// Use the AVX512F + AVX512BW instruction sets
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     Avx512F,
+    /// Use the NEON instruction set
+    #[cfg(target_arch = "aarch64")]
+    Neon,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,9 +85,14 @@ impl FromStr for SimdImpl {
         match s.to_lowercase().as_str() {
             "auto" => Ok(SimdImpl::Auto),
             "generic" => Ok(SimdImpl::Generic),
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             "sse2" => Ok(SimdImpl::Sse2),
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             "avx2" => Ok(SimdImpl::Avx2),
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
             "avx512f" => Ok(SimdImpl::Avx512F),
+            #[cfg(target_arch = "aarch64")]
+            "neon" => Ok(SimdImpl::Neon),
             _ => Err(ParseSimdImplErr),
         }
     }
@@ -120,6 +133,14 @@ pub unsafe fn select_implementation(impl_: SimdImpl) {
                 SimdImpl::Sse2 => unsafe { IMPL = (sse2::shuffle, sse2::unshuffle); },
                 SimdImpl::Avx2 => unsafe { IMPL = (avx2::shuffle, sse2::unshuffle); },
                 SimdImpl::Avx512F => unsafe { IMPL = (avx512f::shuffle, sse2::unshuffle); },
+            }
+        } else if #[cfg(target_arch = "aarch64")] {
+            match impl_ {
+                SimdImpl::Auto | SimdImpl::Neon => {
+                    // NEON is always available on aarch64
+                    unsafe { IMPL = (neon::shuffle, neon::unshuffle); }
+                },
+                SimdImpl::Generic => unsafe { IMPL = (generic::shuffle, generic::unshuffle); },
             }
         } else {
             let _ = impl_;
@@ -371,14 +392,12 @@ mod t {
         }
     }
 
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
     mod shuffle {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         use rand::Rng;
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         use rstest::rstest;
 
         /// Compare optimized results against generic results
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         #[rstest]
         #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
             case::sse2(crate::sse2::shuffle, is_x86_feature_detected!("sse2")))]
@@ -389,6 +408,7 @@ mod t {
                         is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
             )
         )]
+        #[cfg_attr(target_arch = "aarch64", case::neon(crate::neon::shuffle, true))]
         fn compare(
             #[values(2, 4, 8, 13, 16, 18, 32, 36, 43, 47)] typesize: usize,
             #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
@@ -457,11 +477,12 @@ mod t {
 
         /// Compare optimized results against generic results
         #[rstest]
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
         #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
             case::sse2(crate::sse2::unshuffle, is_x86_feature_detected!("sse2")))]
         #[cfg_attr(any(target_arch = "x86", target_arch = "x86_64"),
             case::avx2(crate::avx2::unshuffle, is_x86_feature_detected!("avx2")))]
+        #[cfg_attr(target_arch = "aarch64", case::neon(crate::neon::unshuffle, true))]
         fn compare(
             #[values(2, 4, 8, 16, 18, 32, 36, 43, 47)] typesize: usize,
             #[values(64, 65, 256, 258, 1024, 1028, 4096, 4112)] len: usize,
