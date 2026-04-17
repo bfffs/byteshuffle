@@ -11,7 +11,7 @@ this filter frequently results in lengthy continuous runs of identical bytes.
 Such runs are highly compressible by general-purpose compression libraries like
 gzip, lz4, etc.
 
-![Build Status](https://api.cirrus-ci.com/github/bfffs/byteshuffle.svg)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/somers/byteshuffle/ci.yml?branch=master&style=flat-square)](https://github.com/somers/byteshuffle/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Crates.io](https://img.shields.io/crates/v/byteshuffle.svg)](https://crates.io/crates/byteshuffle)
 
 [Documentation](https://docs.rs/crate/byteshuffle)
