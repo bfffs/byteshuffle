@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  RUSTDOCFLAGS: -Dwarnings
+
+jobs:
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.89.0
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build
+        run: cargo build
+      - name: Doc
+        run: cargo doc --no-deps
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust_version: stable
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - rust_version: stable
+            target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+    name: ${{ matrix.rust_version }} ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build
+      - name: Test
+        run: cargo test --all-targets
+      - name: Doc
+        run: cargo doc --no-deps
+
+  nightly:
+    name: nightly
+    runs-on: ubuntu-latest
+    container:
+      image: rustlang/rust:nightly
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - name: Build
+        run: cargo build --all-features
+      - name: Test
+        run: cargo test --all-features --all-targets
+      - name: Clippy
+        run: rustup component add clippy && cargo clippy --all-features --all-targets -- -D warnings
+      - name: Minver
+        run: cargo update -Zdirect-minimal-versions && cargo test --all-features --all-targets
